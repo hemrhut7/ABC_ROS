@@ -26,4 +26,6 @@ venv/
 **/_agent*/
 **/.agents/
 **/.agent_scratchpad/
+scratch/
+
 

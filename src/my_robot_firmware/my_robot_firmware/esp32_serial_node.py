@@ -33,7 +33,7 @@ class ESP32SerialNode(Node):
 
         # Node parameters
         self.declare_parameter('display_rate', 1.0) # Hz for terminal print
-        self.display_rate = self.get_parameter('display_rate').get_value()
+        self.display_rate = self.get_parameter('display_rate').value
 
         self.get_logger().info(f"Starting ESP32 Serial/Telemetry Node with display rate: {self.display_rate} Hz")
 

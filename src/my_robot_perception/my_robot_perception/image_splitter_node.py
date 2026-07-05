@@ -18,11 +18,11 @@ class ImageSplitterNode(Node):
         self.declare_parameter('frame_id', 'camera_link')
         
         # Get parameters
-        self.video_device = self.get_parameter('video_device').get_value()
-        self.width = self.get_parameter('width').get_value()
-        self.height = self.get_parameter('height').get_value()
-        self.fps = self.get_parameter('fps').get_value()
-        self.frame_id = self.get_parameter('frame_id').get_value()
+        self.video_device = self.get_parameter('video_device').value
+        self.width = self.get_parameter('width').value
+        self.height = self.get_parameter('height').value
+        self.fps = self.get_parameter('fps').value
+        self.frame_id = self.get_parameter('frame_id').value
         
         self.get_logger().info(
             f"Initializing Image Splitter Node:\n"
