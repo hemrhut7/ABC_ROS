@@ -1,0 +1,29 @@
+# ROS 2 build products
+build/
+install/
+log/
+
+# IDE settings
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Python cache and compiled files
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.pytest_cache/
+.poetry/
+.venv/
+env/
+venv/
+
+# Agent settings & scratchpad
+.agents/
+.agent_scratchpad/
+**/_agent*/
+**/.agents/
+**/.agent_scratchpad/
+

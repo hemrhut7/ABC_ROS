@@ -157,6 +157,33 @@ docker run -it --rm --net=host --privileged -v /dev:/dev microros/micro-ros-agen
 > [!IMPORTANT]
 > 鮑率（Baud Rate）參數 `-b` 必須與 ESP32 韌體中的設定相符。若使用 `my_robot_bringup` 中的一鍵啟動，請至 [params.yaml](file:///home/hank/Project/src/my_robot_bringup/config/params.yaml) 或 [robot.launch.py](file:///home/hank/Project/src/my_robot_bringup/launch/robot.launch.py) 中調整對應參數。
 
+### 3. 關閉退出 Container
+方法一：直接關閉並退出（最常用）
+如果你已經做完測試，想要直接關閉這個容器：
+
+指令： 在容器內輸入 exit 然後按下 Enter。
+
+快捷鍵： 直接按下 Ctrl + D。
+
+💡 注意： 因為 jetson-containers run 底層預設帶有 --rm（自動刪除）參數，當你用這個方法退出時，這個容器實例就會直接被銷毀關閉，釋放記憶體。不過別擔心！你在 /workspace 內修改的程式碼因為有掛載到本機的 ~/Project，所以檔案絕對不會不見。
+
+方法二：暫時分離（Detach）容器（讓程式在背景繼續跑）
+如果你在容器裡面已經啟動了 micro-ROS Agent 或平衡車的節點，不希望程式因為你關閉終端機而中斷，想要讓它在背景（Background）偷偷運行：
+
+快捷鍵： 先按住 Ctrl + P，接著按 Ctrl + Q。
+
+此時你會發現畫面退回到了你原本的 hank@hank-desktop:~$ 主機環境，但容器其實還活著。
+
+🔄 如何重新回到剛才在背景跑的容器？
+先查詢該容器的 ID 或名稱：
+
+Bash
+docker ps
+使用 attach 指令重新連回該容器的畫面：
+
+Bash
+docker attach <容器的 ID 或名稱>
+
 ---
 
 ### 3. Windows PC 端 Foxglove Studio 視覺化配置
