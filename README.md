@@ -48,30 +48,24 @@ graph TD
 
 ## 📂 專案套件結構說明
 
-本工作空間包含四大核心 ROS 2 套件，您可以使用以下連結直接瀏覽與編輯對應檔案：
+本工作空間包含三大核心 ROS 2 套件，您可以使用以下連結直接瀏覽與編輯對應檔案：
 
-1. **[my_robot_bringup](file:///home/hank/Project/src/my_robot_bringup)**
+1. **[my_robot_bringup](src/my_robot_bringup)**
    - 負責整個機器人系統的一鍵啟動與全域參數管理。
    - **關鍵檔案**：
-     - [robot.launch.py](file:///home/hank/Project/src/my_robot_bringup/launch/robot.launch.py) : 一鍵啟動 micro-ROS agent、遙測節點與雙目相機影像切割節點。
-     - [params.yaml](file:///home/hank/Project/src/my_robot_bringup/config/params.yaml) : 包含相機解析度、FPS、串流裝置路徑以及遙測更新頻率等參數。
+     - [robot.launch.py](src/my_robot_bringup/launch/robot.launch.py) : 一鍵啟動 micro-ROS agent、遙測節點與雙目相機影像切割節點。
+     - [params.yaml](src/my_robot_bringup/config/params.yaml) : 包含相機解析度、FPS、串流裝置路徑以及遙測更新頻率等參數。
 
-2. **[my_robot_firmware](file:///home/hank/Project/src/my_robot_firmware)**
+2. **[my_robot_firmware](src/my_robot_firmware)**
    - 負責對接微控制器底層的串流與遙測數據處理。
    - **關鍵檔案**：
-     - [esp32_serial_node.py](file:///home/hank/Project/src/my_robot_firmware/my_robot_firmware/esp32_serial_node.py) : 訂閱 ESP32 發布的 IMU、姿態、馬達編碼器等 Topic，並在終端機渲染出精美的 CLI 即時遙測儀表板。同時提供向 ESP32 發送速度與模式指令的 API。
-     - [hal_microros.cpp](file:///home/hank/Project/src/my_robot_firmware/ref/hal_microros.cpp) : ESP32 端的 micro-ROS 韌體底層參考程式碼，展示如何與 Jetson 端進行資料對接。
+     - [esp32_serial_node.py](src/my_robot_firmware/my_robot_firmware/esp32_serial_node.py) : 訂閱 ESP32 發布的 IMU、姿態、馬達編碼器等 Topic，並在終端機渲染出精美的 CLI 即時遙測儀表板。同時提供向 ESP32 發送速度與模式指令的 API。
+     - [hal_microros.cpp](src/my_robot_firmware/ref/hal_microros.cpp) : ESP32 端的 micro-ROS 韌體底層參考程式碼，展示如何與 Jetson 端進行資料對接。
 
-3. **[my_robot_perception](file:///home/hank/Project/src/my_robot_perception)**
+3. **[my_robot_perception](src/my_robot_perception)**
    - 負責雙目相機影像的擷取、切割與壓縮傳輸。
    - **關鍵檔案**：
-     - [image_splitter_node.py](file:///home/hank/Project/src/my_robot_perception/my_robot_perception/image_splitter_node.py) : 讀取雙目廣角相機的 2560x720 影像，切割為左右兩張 1280x720 影像，並同時發布 Raw 與 Compressed 格式，以及 CameraInfo 校正資訊，降低網路頻寬消耗。
-
-4. **[my_robot_interfaces](file:///home/hank/Project/src/my_robot_interfaces)**
-   - 自定義的 ROS 2 訊息（Message）與服務（Service）格式宣告套件。
-   - **關鍵檔案**：
-     - [CMakeLists.txt](file:///home/hank/Project/src/my_robot_interfaces/CMakeLists.txt) : 設定編譯與生成 Message 的規則。
-     - [msg/](file:///home/hank/Project/src/my_robot_interfaces/msg) 與 [srv/](file:///home/hank/Project/src/my_robot_interfaces/srv) : 放置自定義的 `.msg` 與 `.srv` 檔案。
+     - [image_splitter_node.py](src/my_robot_perception/my_robot_perception/image_splitter_node.py) : 讀取雙目廣角相機的 2560x720 影像，切割為左右兩張 1280x720 影像，並同時發布 Raw 與 Compressed 格式，以及 CameraInfo 校正資訊，降低網路頻寬消耗。
 
 ---
 
@@ -86,12 +80,12 @@ graph TD
 jetson-containers run \
   --privileged \
   -v /dev:/dev \
-  -v ~/Project:/workspace \
+  -v ~/ROS_ABC:/workspace \
   $(autotag ros:humble-ros-base)
 ```
 > [!NOTE]
 > - `--privileged`: 提供容器直接讀寫 Host 硬體（如 USB 轉序列埠 `/dev/ttyUSB*`、GPIO UART `/dev/ttyTHS*` 以及 USB 相機 `/dev/video*`）的權限。
-> - `-v ~/Project:/workspace`: 將專案目錄掛載至容器內的 `/workspace` 路徑，實現即時程式修改與持續編譯。
+> - `-v ~/ROS_ABC:/workspace`: 將專案目錄掛載至容器內的 `/workspace` 路徑，實現即時程式修改與持續編譯。
 
 ### Step 2: 在 Container 內編譯工作空間
 進入 Container 終端機後，執行以下命令進行 Colcon 編譯：
@@ -155,7 +149,7 @@ docker run -it --rm --net=host --privileged -v /dev:/dev microros/micro-ros-agen
 docker run -it --rm --net=host --privileged -v /dev:/dev microros/micro-ros-agent:humble serial --dev /dev/ttyTHS1 -b 2000000
 ```
 > [!IMPORTANT]
-> 鮑率（Baud Rate）參數 `-b` 必須與 ESP32 韌體中的設定相符。若使用 `my_robot_bringup` 中的一鍵啟動，請至 [params.yaml](file:///home/hank/Project/src/my_robot_bringup/config/params.yaml) 或 [robot.launch.py](file:///home/hank/Project/src/my_robot_bringup/launch/robot.launch.py) 中調整對應參數。
+> 鮑率（Baud Rate）參數 `-b` 必須與 ESP32 韌體中的設定相符。若使用 `my_robot_bringup` 中的一鍵啟動，請至 [params.yaml](src/my_robot_bringup/config/params.yaml) 或 [robot.launch.py](src/my_robot_bringup/launch/robot.launch.py) 中調整對應參數。
 
 ### 3. 關閉退出 Container
 方法一：直接關閉並退出（最常用）
@@ -165,7 +159,7 @@ docker run -it --rm --net=host --privileged -v /dev:/dev microros/micro-ros-agen
 
 快捷鍵： 直接按下 Ctrl + D。
 
-💡 注意： 因為 jetson-containers run 底層預設帶有 --rm（自動刪除）參數，當你用這個方法退出時，這個容器實例就會直接被銷毀關閉，釋放記憶體。不過別擔心！你在 /workspace 內修改的程式碼因為有掛載到本機的 ~/Project，所以檔案絕對不會不見。
+💡 注意： 因為 jetson-containers run 底層預設帶有 --rm（自動刪除）參數，當你用這個方法退出時，這個容器實例就會直接被銷毀關閉，釋放記憶體。不過別擔心！你在 /workspace 內修改的程式碼因為有掛載到本機的 ~/ROS_ABC，所以檔案絕對不會不見。
 
 方法二：暫時分離（Detach）容器（讓程式在背景繼續跑）
 如果你在容器裡面已經啟動了 micro-ROS Agent 或平衡車的節點，不希望程式因為你關閉終端機而中斷，想要讓它在背景（Background）偷偷運行：
@@ -206,7 +200,7 @@ ros2 launch foxglove_bridge foxglove_bridge_launch.xml
 ## 🛠️ 自定義開發與調整指引
 
 ### 1. 修改節點參數
-您可以直接調整 [params.yaml](file:///home/hank/Project/src/my_robot_bringup/config/params.yaml) 檔：
+您可以直接調整 [params.yaml](src/my_robot_bringup/config/params.yaml) 檔：
 ```yaml
 image_splitter_node:
   ros__parameters:
@@ -220,23 +214,6 @@ esp32_serial_node:
   ros__parameters:
     display_rate: 1.0     # 終端機遙測 CLI 儀表板的更新頻率 (Hz)
 ```
-
-### 2. 撰寫自定義 ROS 2 訊息與服務 (my_robot_interfaces)
-若您需要擴充通訊格式：
-1. 進入 [my_robot_interfaces/msg/](file:///home/hank/Project/src/my_robot_interfaces/msg) 資料夾，新增自定義訊息定義，如 `CustomTelemetry.msg`：
-   ```text
-   float32 pitch
-   float32 roll
-   float32 yaw
-   float32 battery_percentage
-   ```
-2. 開啟 [CMakeLists.txt](file:///home/hank/Project/src/my_robot_interfaces/CMakeLists.txt)，將該檔案加入 `rosidl_generate_interfaces` 區塊中：
-   ```cmake
-   rosidl_generate_interfaces(${PROJECT_NAME}
-     "msg/CustomTelemetry.msg"
-   )
-   ```
-3. 重新執行 `colcon build` 以產出對應 Python 與 C++ 標頭檔。
 
 ---
 
