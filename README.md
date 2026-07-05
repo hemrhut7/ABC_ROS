@@ -1,7 +1,7 @@
 # 🤖 My Robot ROS 2 Workspace (ABC_ROS)
 
-本專案為一個基於 ROS 2 (Humble) 系統的機器人控制與感測開發工作空間。
-主要運行於 NVIDIA Jetson 邊緣運算平台，並結合 ESP32 微控制器（運行 micro-ROS）以及雙目（Stereo）相機，實現機器人的即時遙測監控、動力控制與視覺感知。
+本專案為一個基於 **ROS 2 (Humble)** 系統的機器人控制與感測開發工作空間。
+主要運行於 **NVIDIA Jetson** 邊緣運算平台，並結合 **ESP32 微控制器**（運行 micro-ROS）以及**雙目 (Stereo) 相機**，實現機器人的即時遙測監控、動力控制與視覺感知。
 
 ---
 
@@ -51,29 +51,29 @@ graph TD
 本工作空間包含三大核心 ROS 2 套件，您可以使用以下連結直接瀏覽與編輯對應檔案：
 
 1. **[my_robot_bringup](src/my_robot_bringup)**
-   - 負責整個機器人系統的一鍵啟動與全域參數管理。
+   - **功能描述**：負責整個機器人系統的一鍵啟動與全域參數管理。
    - **關鍵檔案**：
-     - [robot.launch.py](src/my_robot_bringup/launch/robot.launch.py) : 一鍵啟動 micro-ROS agent、遙測節點與雙目相機影像切割節點。
-     - [params.yaml](src/my_robot_bringup/config/params.yaml) : 包含相機解析度、FPS、串流裝置路徑以及遙測更新頻率等參數。
+     - [robot.launch.py](src/my_robot_bringup/launch/robot.launch.py)：一鍵啟動 micro-ROS Agent、遙測節點與雙目相機影像切割節點。
+     - [params.yaml](src/my_robot_bringup/config/params.yaml)：包含相機解析度、FPS、串流裝置路徑以及遙測更新頻率等參數。
 
 2. **[my_robot_firmware](src/my_robot_firmware)**
-   - 負責對接微控制器底層的串流與遙測數據處理。
+   - **功能描述**：負責對接微控制器底層的串流與遙測數據處理。
    - **關鍵檔案**：
-     - [esp32_serial_node.py](src/my_robot_firmware/my_robot_firmware/esp32_serial_node.py) : 訂閱 ESP32 發布的 IMU、姿態、馬達編碼器等 Topic，並在終端機渲染出精美的 CLI 即時遙測儀表板。同時提供向 ESP32 發送速度與模式指令的 API。
-     - [hal_microros.cpp](src/my_robot_firmware/ref/hal_microros.cpp) : ESP32 端的 micro-ROS 韌體底層參考程式碼，展示如何與 Jetson 端進行資料對接。
+     - [esp32_serial_node.py](src/my_robot_firmware/my_robot_firmware/esp32_serial_node.py)：訂閱 ESP32 發布的 IMU、姿態、馬達編碼器等 Topic，並在終端機渲染出即時的 CLI 遙測儀表板。同時提供向 ESP32 發送速度與模式指令的 API。
+     - [hal_microros.cpp](src/my_robot_firmware/ref/hal_microros.cpp)：ESP32 端的 micro-ROS 韌體底層參考程式碼，展示如何與 Jetson 端進行資料對接。
 
 3. **[my_robot_perception](src/my_robot_perception)**
-   - 負責雙目相機影像的擷取、切割與壓縮傳輸。
+   - **功能描述**：負責雙目相機影像的擷取、切割與壓縮傳輸。
    - **關鍵檔案**：
-     - [image_splitter_node.py](src/my_robot_perception/my_robot_perception/image_splitter_node.py) : 讀取雙目廣角相機的 2560x720 影像，切割為左右兩張 1280x720 影像，並同時發布 Raw 與 Compressed 格式，以及 CameraInfo 校正資訊，降低網路頻寬消耗。
+     - [image_splitter_node.py](src/my_robot_perception/my_robot_perception/image_splitter_node.py)：讀取雙目廣角相機的 2560x720 影像，切割為左右兩張 1280x720 影像，並同時發布 Raw 與 Compressed 格式，以及 CameraInfo 校正資訊，降低網路頻寬消耗。
 
 ---
 
 ## 🔨 環境建置與執行教學 (Docker 容器環境)
 
-本專案之主控程式運行於 NVIDIA Jetson 之 Docker 容器環境中，以確保與 host 硬體（V4L2 相機、Serial 序列埠）的順暢串接。
+本專案之主控程式運行於 NVIDIA Jetson 之 Docker 容器環境中，以確保與 Host 硬體（V4L2 相機、Serial 序列埠）的順暢串接。
 
-### Step 1: 啟動 Jetson 專屬 ROS 2 Container
+### Step 1: 啟動 Jetson 專屬 ROS 2 容器
 我們使用 `jetson-containers` 工具鏈，並掛載專案資料夾與設備驅動權限。請在 Jetson Host 端執行：
 
 ```bash
@@ -81,14 +81,15 @@ jetson-containers run \
   --privileged \
   -v /dev:/dev \
   -v ~/ROS_ABC:/workspace \
-  $(autotag ros:humble-ros-base)
+  $(autotag ros:humble-ros-base-hank)
 ```
-> [!NOTE]
-> - `--privileged`: 提供容器直接讀寫 Host 硬體（如 USB 轉序列埠 `/dev/ttyUSB*`、GPIO UART `/dev/ttyTHS*` 以及 USB 相機 `/dev/video*`）的權限。
-> - `-v ~/ROS_ABC:/workspace`: 將專案目錄掛載至容器內的 `/workspace` 路徑，實現即時程式修改與持續編譯。
 
-### Step 2: 在 Container 內編譯工作空間
-進入 Container 終端機後，執行以下命令進行 Colcon 編譯：
+> [!NOTE]
+> - `--privileged`：提供容器直接讀寫 Host 硬體（如 USB 轉序列埠 `/dev/ttyUSB*`、GPIO UART `/dev/ttyTHS*` 以及 USB 相機 `/dev/video*`）的權限。
+> - `-v ~/ROS_ABC:/workspace`：將專案目錄掛載至容器內的 `/workspace` 路徑，實現即時程式修改與持續編譯。
+
+### Step 2: 在容器內編譯工作空間
+進入容器終端機後，執行以下命令進行 Colcon 編譯：
 
 ```bash
 # 切換至工作空間根目錄
@@ -98,6 +99,9 @@ cd /workspace
 colcon build --symlink-install
 ```
 
+> [!TIP]
+> 由於在編譯時使用了 `--symlink-install` 參數，Python 程式的變更會即時生效，您**不需要**重新執行 `colcon build`！
+
 ### Step 3: 載入環境變數
 編譯完成後，必須將工作空間的環境設定檔載入當前 Shell：
 
@@ -106,7 +110,7 @@ source install/setup.bash
 ```
 
 ### Step 4: 一鍵啟動機器人系統
-使用 Launch 檔同時運行 micro-ROS Agent（使用 `/dev/ttyTHS1` GPIO 串列、鮑率 2000000）、遙測監控節點與相機影像切割節點：
+使用 Launch 檔案同時運行 micro-ROS Agent（使用 `/dev/ttyTHS1` GPIO 串列、鮑率 2000000）、遙測監控節點與相機影像切割節點：
 
 ```bash
 ros2 launch my_robot_bringup robot.launch.py
@@ -114,86 +118,73 @@ ros2 launch my_robot_bringup robot.launch.py
 
 ---
 
-## 🛡️ 核心運作維運與安全指南
+## 🛡️ 核心維運與安全指南
 
 ### 1. 使用 TMUX 預防斷線摔車（核心安全機制）
 在無線網路環境開發平衡車或移動機器人時，最常遇到的災難是：Wi-Fi 訊號變弱導致 SSH 連線中斷，使控制程式在背景當機，導致機器人直接摔倒損壞。
 使用 **TMUX** 是解決此問題的最佳保命符！
 
-#### 建立並鎖定背景會話：
+#### 建立並鎖定背景會話
 在 PC 端透過 SSH 連入 Jetson 後，請輸入：
 ```bash
 tmux new -s robot_ws
 ```
-這會在 Jetson 系統背景建立名為 `robot_ws` 的獨立 Session。**即便 SSH 斷線或關閉終端機，此 Session 中的 ROS 2 控制節點依然會穩定在背景運作**，不會摔車。
+這會在 Jetson 系統背景建立名為 `robot_ws` 的獨立會話。**即便 SSH 斷線或關閉終端機，此會話中的 ROS 2 控制節點依然會穩定在背景運作**，不會因斷線而摔車。
 
-#### 實用 TMUX 視窗管理快捷鍵（先按 `Ctrl + b` 釋放，再按對應鍵）：
+#### 常用 TMUX 快捷鍵 (先按 `<kbd>Ctrl</kbd> + <kbd>b</kbd>` 釋放，再按對應按鍵)：
 - `%` : 左右分割視窗（方便一邊看遙測，一邊發送指令）。
 - `"` : 上下分割視窗。
 - `方向鍵` : 在不同分割視窗間切換。
-- `d` : 暫時離開（Detach）此會話，使其在背景繼續執行。
+- `d` : 暫時離開 (Detach) 此會話，使其在背景繼續執行。
 - 重新連回會話：`tmux attach -t robot_ws`。
 
 ---
 
-### 2. 獨立啟動 micro-ROS Agent（數據讀取與硬體切換）
+### 2. 獨立啟動 micro-ROS Agent (數據偵錯與硬體切換)
 如果需要測試不同的硬體連線模式（例如從 GPIO UART 切換至 USB 連接），可以手動啟動 micro-ROS Agent。
 
-#### 模式 A：USB 連接（常見於 ESP32 開發板透過 MicroUSB/Type-C 連接 Jetson）
+#### 模式 A：USB 連接 (常見於 ESP32 開發板透過 MicroUSB/Type-C 連接 Jetson)
 ```bash
 docker run -it --rm --net=host --privileged -v /dev:/dev microros/micro-ros-agent:humble serial --dev /dev/ttyUSB0 -b 921600
 ```
 
-#### 模式 B：GPIO UART 連接（常見於直連 Jetson 的 40-Pin UART 接口，推薦）
+#### 模式 B：GPIO UART 連接 (常見於直連 Jetson 的 40-Pin UART 接口，推薦)
 ```bash
 docker run -it --rm --net=host --privileged -v /dev:/dev microros/micro-ros-agent:humble serial --dev /dev/ttyTHS1 -b 2000000
 ```
+
 > [!IMPORTANT]
-> 鮑率（Baud Rate）參數 `-b` 必須與 ESP32 韌體中的設定相符。若使用 `my_robot_bringup` 中的一鍵啟動，請至 [params.yaml](src/my_robot_bringup/config/params.yaml) 或 [robot.launch.py](src/my_robot_bringup/launch/robot.launch.py) 中調整對應參數。
-
-### 3. 關閉退出 Container
-方法一：直接關閉並退出（最常用）
-如果你已經做完測試，想要直接關閉這個容器：
-
-指令： 在容器內輸入 exit 然後按下 Enter。
-
-快捷鍵： 直接按下 Ctrl + D。
-
-💡 注意： 因為 jetson-containers run 底層預設帶有 --rm（自動刪除）參數，當你用這個方法退出時，這個容器實例就會直接被銷毀關閉，釋放記憶體。不過別擔心！你在 /workspace 內修改的程式碼因為有掛載到本機的 ~/ROS_ABC，所以檔案絕對不會不見。
-
-方法二：暫時分離（Detach）容器（讓程式在背景繼續跑）
-如果你在容器裡面已經啟動了 micro-ROS Agent 或平衡車的節點，不希望程式因為你關閉終端機而中斷，想要讓它在背景（Background）偷偷運行：
-
-快捷鍵： 先按住 Ctrl + P，接著按 Ctrl + Q。
-
-此時你會發現畫面退回到了你原本的 hank@hank-desktop:~$ 主機環境，但容器其實還活著。
-
-🔄 如何重新回到剛才在背景跑的容器？
-先查詢該容器的 ID 或名稱：
-
-Bash
-docker ps
-使用 attach 指令重新連回該容器的畫面：
-
-Bash
-docker attach <容器的 ID 或名稱>
+> 鮑率 (Baud Rate) 參數 `-b` 必須與 ESP32 韌體中的設定相符。若使用 `my_robot_bringup` 中的一鍵啟動，請至 [params.yaml](src/my_robot_bringup/config/params.yaml) 或 [robot.launch.py](src/my_robot_bringup/launch/robot.launch.py) 中調整對應參數。
 
 ---
 
-### 3. Windows PC 端 Foxglove Studio 視覺化配置
-Foxglove Studio 是目前功能最齊全的 ROS 2 可視化輔助軟體，適合觀測 3D 姿態、相機畫面與電池健康度。
+### 3. Docker 容器生命週期管理
 
-#### Jetson 端：安裝並運行橋接節點
-```bash
-sudo apt update && sudo apt install -y ros-humble-foxglove-bridge
-ros2 launch foxglove_bridge foxglove_bridge_launch.xml
-```
+#### 退出與關閉容器
+如果您已完成測試，想要直接關閉並退出容器：
+- **指令方式**：在容器內輸入 `exit` 並按下 `<kbd>Enter</kbd>`。
+- **快捷鍵方式**：直接按下 `<kbd>Ctrl</kbd> + <kbd>D</kbd>`。
 
-#### PC 端連線步驟：
-1. 前往官網下載並開啟 Windows 版 [Foxglove Studio](https://foxglove.dev/)。
-2. 選擇「Open Connection」，連接類型選擇 **Foxglove WebSocket**。
-3. 輸入連線 URL: `ws://<Jetson_IP>:8765`，點擊 Connect。
-4. 即可在軟體介面拉入 Image Panel 觀看 `/camera/left/image_raw/compressed` 或透過 3D Panel 查看 `/imu/data_raw` 的即時姿態與點雲。
+> [!NOTE]
+> 由於 `jetson-containers run` 啟動參數預設帶有 `--rm`（自動刪除），使用上述方式退出時，該容器實例將會被自動銷毀並釋放記憶體。
+> 
+> **程式碼安全保障**：您在容器內 `/workspace` 目錄下修改的任何程式碼，皆已同步映射至本機的 `~/ROS_ABC`，檔案絕不會遺失。
+
+#### 暫時分離 (Detach) 容器 (讓程式在背景繼續運行)
+如果您在容器中啟動了 micro-ROS Agent 或平衡車控制節點，不希望因為關閉終端機或 SSH 斷線而導致程式中斷，可以將容器移至背景運行：
+- **快捷鍵方式**：先按住 `<kbd>Ctrl</kbd> + <kbd>P</kbd>`，接著按 `<kbd>Ctrl</kbd> + <kbd>Q</kbd>`。
+
+此時終端機會返回到 Host 主控端環境（例如 `hank@hank-desktop:~$`），但該 Docker 容器仍在背景持續運作。
+
+#### 🔄 如何重新附載 (Attach) 回背景運行的容器？
+1. 先查詢正在運作的容器 ID 或名稱：
+   ```bash
+   docker ps
+   ```
+2. 使用 `attach` 指令重新連接至該容器畫面：
+   ```bash
+   docker attach <CONTAINER_ID_OR_NAME>
+   ```
 
 ---
 
@@ -220,7 +211,7 @@ esp32_serial_node:
 ## ⚡ Jetson 常用硬體效能控制指令
 
 ### 查看系統效能與資源佔用率
-在 Host 終端機執行 `jtop`（由 jetson-stats 提供），可即時查看 CPU、GPU 負載、記憶體與晶片溫度：
+在 Host 終端機執行 `jtop`（由 `jetson-stats` 提供），可即時查看 CPU、GPU 負載、記憶體與晶片溫度：
 ```bash
 jtop
 ```
