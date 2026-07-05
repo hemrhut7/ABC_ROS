@@ -9,6 +9,14 @@ def generate_launch_description():
     # params_file = os.path.join(config_dir, 'params.yaml')
 
     return LaunchDescription([
+        Node(
+            package='micro_ros_agent',
+            executable='micro_ros_agent',
+            name='micro_ros_agent',
+            arguments=['serial', '--dev', '/dev/ttyTHS1', '-b', '2000000'],
+            output='screen'
+        ),
+
         # 1. ESP32 Serial / Telemetry Node
         Node(
             package='my_robot_firmware',
