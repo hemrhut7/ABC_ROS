@@ -1,0 +1,11 @@
+image_splitter_node:
+  ros__parameters:
+    video_device: 0
+    width: 2560
+    height: 720
+    fps: 30
+    frame_id: "camera_link"
+
+esp32_serial_node:
+  ros__parameters:
+    display_rate: 1.0
