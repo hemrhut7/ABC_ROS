@@ -228,6 +228,7 @@ sudo nvpmodel -m 0
 
 ### 執行本機 Gemma-2/Gemma-4 LLM 推理測試 (GGUF)
 在機器人上測試本機大型語言模型邊緣運算，可直接透過 Llama.cpp CLI 載入 GGUF 格式模型並啟用 GPU 加速：
+進入 ```llama.cpp/build/bin```
 ```bash
 ./llama-cli -hf unsloth/gemma-4-E2B-it-GGUF:UD-Q4_K_XL -cnv --n-gpu-layers 99
 ```
