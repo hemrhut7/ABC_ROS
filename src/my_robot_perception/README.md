@@ -8,40 +8,9 @@
 
 本套件之節點建議運行於 NVIDIA Jetson 之 Docker 容器環境中，以確保與 Host 端的 V4L2 相機硬體順暢串接。
 
-### Step 1: 啟動 ROS 2 Docker 容器
-在 Jetson Host 端終端機執行以下指令，掛載本專案工作空間並提供硬體權限：
+### 執行相機分割節點
+
 ```bash
-jetson-containers run \
-  --privileged \
-  -v /dev:/dev \
-  -v ~/ROS_ABC:/workspace \
-  $(autotag ros:humble-ros-base-hank)
-```
-
----
-
-### Step 2: 在容器內編譯工作空間
-進入容器終端機後，執行以下指令編譯本套件：
-```bash
-# 切換至工作空間根目錄
-cd /workspace
-
-# 編譯 my_robot_perception 套件（或編譯整個工作空間）
-colcon build --symlink-install
-```
-
-> [!TIP]
-> 啟用 `--symlink-install` 參數後，Python 節點的任何程式碼修改都會即時生效，無需重新進行 `colcon build`。
-
----
-
-### Step 3: 啟動雙目相機分割節點
-在容器終端機內載入環境變數並執行節點：
-```bash
-# 載入當前工作空間設定
-source install/setup.bash
-
-# 執行相機分割節點
 ros2 run my_robot_perception image_splitter_node
 ```
 
@@ -55,7 +24,7 @@ Camera opened successfully. Actual Resolution: 2560x720 Actual FPS: 30
 
 ---
 
-### Step 4: 驗證 Topic 數據輸出
+### 驗證 Topic 數據輸出
 請在 PC 端透過另一個 SSH 連線，或使用 TMUX 開啟新視窗，連入同一個運行中的容器：
 
 ```bash
@@ -104,6 +73,11 @@ sudo apt update && sudo apt install -y ros-humble-foxglove-bridge
 
 # 啟動橋接節點
 ros2 launch foxglove_bridge foxglove_bridge_launch.xml
+```
+
+可指定topic進行發布，降低系統負載
+```bash
+ros2 launch foxglove_bridge foxglove_bridge_launch.xml topic_whitelist:="['/camera/right/image_raw']"
 ```
 
 ### 2. PC 端：連線與顯示影像

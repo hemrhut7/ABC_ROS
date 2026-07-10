@@ -4,9 +4,9 @@ import os
 from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
-    # Get share directory config path if parameters are to be loaded from yaml
-    # config_dir = os.path.join(get_package_share_directory('my_robot_bringup'), 'config')
-    # params_file = os.path.join(config_dir, 'params.yaml')
+    # Get config directory and params file path
+    config_dir = os.path.join(get_package_share_directory('my_robot_bringup'), 'config')
+    params_file = os.path.join(config_dir, 'params.yaml')
 
     return LaunchDescription([
         Node(
@@ -23,9 +23,7 @@ def generate_launch_description():
             executable='esp32_serial_node',
             name='esp32_serial_node',
             output='screen',
-            parameters=[{
-                'display_rate': 1.0
-            }]
+            parameters=[params_file]
         ),
         
         # 2. Camera Image Splitter Node
@@ -34,12 +32,6 @@ def generate_launch_description():
             executable='image_splitter_node',
             name='image_splitter_node',
             output='screen',
-            parameters=[{
-                'video_device': 0,
-                'width': 2560,
-                'height': 720,
-                'fps': 30,
-                'frame_id': 'camera_link'
-            }]
+            parameters=[params_file]
         )
     ])

@@ -5,6 +5,8 @@ image_splitter_node:
     height: 720
     fps: 30
     frame_id: "camera_link"
+    rotation_angle: 180
+    jpeg_quality: 80
 
 esp32_serial_node:
   ros__parameters:

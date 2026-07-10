@@ -106,6 +106,7 @@ colcon build --symlink-install
 編譯完成後，必須將工作空間的環境設定檔載入當前 Shell：
 
 ```bash
+source /opt/ros/humble/setup.bash
 source install/setup.bash
 ```
 
@@ -114,6 +115,11 @@ source install/setup.bash
 
 ```bash
 ros2 launch my_robot_bringup robot.launch.py
+```
+
+或者啟動單一節點
+```bash
+ros2 run my_robot_perception image_splitter_node
 ```
 
 ---
