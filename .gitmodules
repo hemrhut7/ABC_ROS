@@ -1,0 +1,3 @@
+[submodule "src/INS_python"]
+	path = src/INS_python
+	url = https://github.com/hemrhut7/INS_python.git

@@ -27,6 +27,17 @@ def euler_from_quaternion(x, y, z, w):
 
     return math.degrees(roll), math.degrees(pitch), math.degrees(yaw)
 
+# System Modes mapping (matching hal_type_define.h)
+SYSTEM_MODES = {
+    0: "MODE_STOP",
+    1: "MODE_FREE",
+    2: "MODE_PWM",
+    3: "MODE_MOTOR",
+    4: "MODE_ANGLE",
+    5: "MODE_VELOCITY",
+    6: "MODE_REMOTE"
+}
+
 class ESP32SerialNode(Node):
     def __init__(self):
         super().__init__('esp32_serial_node')
@@ -138,9 +149,10 @@ class ESP32SerialNode(Node):
         # 1. System Mode and Delay Count
         mode = self.state['system_mode']
         delay = self.state['delay_count']
-        mode_str = f"{mode}" if mode is not None else "N/A"
+        mode_name = SYSTEM_MODES.get(mode, "UNKNOWN") if mode is not None else "N/A"
+        mode_str = f"{mode_name} ({mode})" if mode is not None else "N/A"
         delay_str = f"{delay}" if delay is not None else "N/A"
-        lines.append(f"[System]  Mode: {mode_str:<12} | Delay Count: {delay_str}")
+        lines.append(f"[System]  Mode: {mode_str:<20} | Delay Count: {delay_str}")
 
         # 2. Battery
         bat = self.state['battery']

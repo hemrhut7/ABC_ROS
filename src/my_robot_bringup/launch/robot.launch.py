@@ -33,5 +33,15 @@ def generate_launch_description():
             name='image_splitter_node',
             output='screen',
             parameters=[params_file]
+        ),
+        
+        # 3. INS EKF Fusion Node
+        Node(
+            package='ins_ekf',
+            executable='ins_ekf_node',
+            name='ins_ekf_node',
+            output='screen',
+            parameters=[params_file]
         )
     ])
+
