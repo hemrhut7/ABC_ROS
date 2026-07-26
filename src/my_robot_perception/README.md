@@ -17,10 +17,10 @@ ros2 run my_robot_perception image_splitter_node
 #### 正常啟動輸出：
 ```
 Initializing Image Splitter Node...
-Camera opened successfully. Actual Resolution: 2560x720 Actual FPS: 30
+Camera opened successfully. Actual Resolution: 1280x480 Actual FPS: 60
 ```
 > [!NOTE]
-> 節點預設會讀取 `/dev/video0` 裝置，並以解析度 `2560x720`、FPS `30` 進行擷取。若需要調整參數，請至 `my_robot_bringup` 的 [params.yaml](file:///home/hank/ROS_ABC/src/my_robot_bringup/config/params.yaml) 中設定。
+> 節點預設會讀取 `/dev/video0` 裝置，並以解析度 `1280x480`（MJPG）、FPS `60` 進行雙目擷取與分割。若需要調整參數，請至 `my_robot_bringup` 的 [params.yaml](file:///home/hank/ROS_ABC/src/my_robot_bringup/config/params.yaml) 中設定。
 
 ---
 
@@ -57,7 +57,7 @@ source /workspace/install/setup.bash
    ```bash
    ros2 topic hz /camera/left/image_raw
    ```
-   影像發布頻率應穩定維持在約 **30.0 Hz**。
+   影像發布頻率應穩定維持在約 **60.0 Hz**。
 
 ---
 

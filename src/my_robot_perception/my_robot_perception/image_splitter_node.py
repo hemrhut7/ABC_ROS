@@ -30,18 +30,20 @@ class ImageSplitterNode(Node):
         
         # Declare parameters
         self.declare_parameter('video_device', 0)
-        self.declare_parameter('width', 2560)
-        self.declare_parameter('height', 720)
-        self.declare_parameter('fps', 30)
+        self.declare_parameter('width', 1280)
+        self.declare_parameter('height', 480)
+        self.declare_parameter('fps', 60)
+        self.declare_parameter('fourcc', 'MJPG')
         self.declare_parameter('frame_id', 'camera_link')
         self.declare_parameter('rotation_angle', 0)
-        self.declare_parameter('jpeg_quality', 80)
+        self.declare_parameter('jpeg_quality', 60)
         
         # Get parameters
         self.video_device = self.get_parameter('video_device').value
         self.width = self.get_parameter('width').value
         self.height = self.get_parameter('height').value
         self.fps = self.get_parameter('fps').value
+        self.fourcc = self.get_parameter('fourcc').value.upper()
         self.frame_id = self.get_parameter('frame_id').value
         self.rotation_angle = self.get_parameter('rotation_angle').value
         self.jpeg_quality = self.get_parameter('jpeg_quality').value
@@ -51,6 +53,7 @@ class ImageSplitterNode(Node):
             f"  Device: /dev/video{self.video_device}\n"
             f"  Target Resolution: {self.width}x{self.height}\n"
             f"  Target FPS: {self.fps}\n"
+            f"  Target Format (FOURCC): {self.fourcc}\n"
             f"  Frame ID: {self.frame_id}\n"
             f"  Rotation Angle: {self.rotation_angle}\n"
             f"  JPEG Quality: {self.jpeg_quality}"
@@ -81,7 +84,7 @@ class ImageSplitterNode(Node):
         self.get_logger().info("Configuring camera parameters...")
         
         # Method 1: Set FOURCC, then resolution, then FPS
-        self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+        self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*self.fourcc))
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
         self.cap.set(cv2.CAP_PROP_FPS, self.fps)
@@ -90,15 +93,15 @@ class ImageSplitterNode(Node):
         actual_fourcc = int(self.cap.get(cv2.CAP_PROP_FOURCC))
         actual_fourcc_str = "".join([chr((actual_fourcc >> 8 * i) & 0xFF) for i in range(4)])
         
-        if actual_fourcc_str != "MJPG":
+        if actual_fourcc_str != self.fourcc:
             self.get_logger().warning(
-                f"Failed to set MJPG format directly. Camera returned: '{actual_fourcc_str}'. "
+                f"Failed to set {self.fourcc} format directly. Camera returned: '{actual_fourcc_str}'. "
                 "Attempting alternative configuration order (Resolution -> FOURCC -> FPS)..."
             )
             # Method 2: Set resolution first, then FOURCC
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
-            self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+            self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*self.fourcc))
             self.cap.set(cv2.CAP_PROP_FPS, self.fps)
             
             actual_fourcc = int(self.cap.get(cv2.CAP_PROP_FOURCC))
@@ -117,46 +120,30 @@ class ImageSplitterNode(Node):
         )
         
         if actual_fourcc_str != "MJPG":
-            self.get_logger().error(
-                f"CRITICAL WARNING: Camera is streaming in '{actual_fourcc_str}' format instead of 'MJPG'. "
-                "This will cause severe USB bandwidth limitation, dropping framerate to ~3-5 FPS. "
-                "Please verify if the camera is connected to a USB 3.0 port and supports MJPG at 2560x720."
+            self.get_logger().warning(
+                f"WARNING: Camera is streaming in '{actual_fourcc_str}' format instead of 'MJPG'. "
+                "Notice: Non-MJPG formats (like YUYV) at high resolution will limit USB bandwidth, dropping framerate to ~3-5 FPS."
             )
             
-        # Threading variables for asynchronous capture
-        self.frame = None
-        self.ret = False
+        # Threading variables for asynchronous capture and processing
         self.running = True
-        self.lock = threading.Lock()
         
-        # Start capture thread
+        # Start capture and processing thread (Plan A: Event-driven per frame)
         self.capture_thread = threading.Thread(target=self.capture_loop, daemon=True)
         self.capture_thread.start()
-        
-        # Create timer for processing/publishing at target FPS
-        timer_period = 1.0 / self.fps
-        self.timer = self.create_timer(timer_period, self.timer_callback)
 
     def capture_loop(self):
         while self.running and rclpy.ok():
             ret, frame = self.cap.read()
-            with self.lock:
-                self.ret = ret
-                if ret:
-                    self.frame = frame
-            if not ret:
+            if not ret or frame is None:
                 time.sleep(0.01)
-
-    def timer_callback(self):
-        start_time = time.time()
-        
-        # Get the latest frame from the capture thread
-        with self.lock:
-            ret = self.ret
-            frame = self.frame
+                continue
             
-        if not ret or frame is None:
-            return
+            # Process and publish frame immediately upon new frame capture
+            self.process_and_publish_frame(frame)
+
+    def process_and_publish_frame(self, frame):
+        start_time = time.time()
 
         # Check subscription counts to implement lazy evaluation (huge CPU saving)
         stereo_raw_subs = self.stereo_pub.get_subscription_count()

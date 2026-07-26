@@ -23,7 +23,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'image_splitter_node = my_robot_perception.image_splitter_node:main'
+            'image_splitter_node = my_robot_perception.image_splitter_node:main',
+            'test_camera = my_robot_perception.test_camera:main'
         ],
     },
 )

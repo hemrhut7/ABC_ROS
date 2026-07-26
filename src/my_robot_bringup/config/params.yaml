@@ -1,12 +1,13 @@
 image_splitter_node:
   ros__parameters:
     video_device: 0
-    width: 2560
-    height: 720
-    fps: 30
+    width: 1280
+    height: 480
+    fps: 60
+    fourcc: "MJPG"
     frame_id: "camera_link"
     rotation_angle: 180
-    jpeg_quality: 80
+    jpeg_quality: 60
 
 esp32_serial_node:
   ros__parameters:
