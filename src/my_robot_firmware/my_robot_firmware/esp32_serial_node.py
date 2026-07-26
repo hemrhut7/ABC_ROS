@@ -2,6 +2,7 @@
 import math
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 
 # Message type imports
 from sensor_msgs.msg import Imu, JointState, MagneticField, FluidPressure, BatteryState, LaserScan, Temperature
@@ -66,16 +67,16 @@ class ESP32SerialNode(Node):
         self.msg_counts = {k: 0 for k in self.state.keys()}
 
         # Initialize Subscribers (subscribing to topics published by ESP32 micro-ROS agent)
-        self.create_subscription(Imu, '/imu/data_raw', self.imu_callback, 10)
-        self.create_subscription(MagneticField, '/imu/mag', self.mag_callback, 10)
-        self.create_subscription(FluidPressure, '/baro/pressure', self.pressure_callback, 10)
-        self.create_subscription(Temperature, '/baro/temperature', self.temp_callback, 10)
-        self.create_subscription(JointState, '/joint_states', self.joint_states_callback, 10)
-        self.create_subscription(BatteryState, '/battery_state', self.battery_callback, 10)
-        self.create_subscription(LaserScan, '/scan', self.scan_callback, 10)
-        self.create_subscription(Int32, '/system_mode', self.system_mode_callback, 10)
-        self.create_subscription(Int32, '/delay_count', self.delay_count_callback, 10)
-        self.create_subscription(Float32MultiArray, '/pid_target', self.pid_target_callback, 10)
+        self.create_subscription(Imu, '/imu/data_raw', self.imu_callback, qos_profile_sensor_data)
+        self.create_subscription(MagneticField, '/imu/mag', self.mag_callback, qos_profile_sensor_data)
+        self.create_subscription(FluidPressure, '/baro/pressure', self.pressure_callback, qos_profile_sensor_data)
+        self.create_subscription(Temperature, '/baro/temperature', self.temp_callback, qos_profile_sensor_data)
+        self.create_subscription(JointState, '/joint_states', self.joint_states_callback, qos_profile_sensor_data)
+        self.create_subscription(BatteryState, '/battery_state', self.battery_callback, qos_profile_sensor_data)
+        self.create_subscription(LaserScan, '/scan', self.scan_callback, qos_profile_sensor_data)
+        self.create_subscription(Int32, '/system_mode', self.system_mode_callback, qos_profile_sensor_data)
+        self.create_subscription(Int32, '/delay_count', self.delay_count_callback, qos_profile_sensor_data)
+        self.create_subscription(Float32MultiArray, '/pid_target', self.pid_target_callback, qos_profile_sensor_data)
 
         # Initialize Publishers (sending command packets back to ESP32 micro-ROS)
         self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
