@@ -44,8 +44,17 @@ def generate_launch_description():
             output='screen',
             parameters=[params_file]
         ),
+
+        # 3. N10 LiDAR Node
+        Node(
+            package='my_robot_perception',
+            executable='n10_lidar_node',
+            name='n10_lidar_node',
+            output='screen',
+            parameters=[params_file]
+        ),
         
-        # 3. INS EKF Fusion Node
+        # 4. INS EKF Fusion Node
         Node(
             package='ins_ekf',
             executable='ins_ekf_node',

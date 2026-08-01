@@ -24,7 +24,8 @@ setup(
     entry_points={
         'console_scripts': [
             'image_splitter_node = my_robot_perception.image_splitter_node:main',
-            'test_camera = my_robot_perception.test_camera:main'
+            'test_camera = my_robot_perception.test_camera:main',
+            'n10_lidar_node = my_robot_perception.n10_lidar_node:main'
         ],
     },
 )

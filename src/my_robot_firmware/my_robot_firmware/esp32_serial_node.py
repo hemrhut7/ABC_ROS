@@ -9,7 +9,7 @@ from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 
 # Message type imports
-from sensor_msgs.msg import Imu, JointState, MagneticField, FluidPressure, BatteryState, LaserScan, Temperature
+from sensor_msgs.msg import Imu, JointState, MagneticField, FluidPressure, BatteryState, Temperature
 from std_msgs.msg import Int32, Float32MultiArray
 from geometry_msgs.msg import Twist, TwistStamped
 
@@ -108,7 +108,6 @@ class ESP32SerialNode(Node):
             'temperature': None,
             'joint_states': None,
             'battery': None,
-            'scan': None,
             'system_mode': None,
             'delay_count': None,
             'pid_target': None
@@ -124,7 +123,6 @@ class ESP32SerialNode(Node):
         self.create_subscription(Temperature, '/baro/temperature', self.temp_callback, qos_profile_sensor_data)
         self.create_subscription(JointState, '/joint_states', self.joint_states_callback, qos_profile_sensor_data)
         self.create_subscription(BatteryState, '/battery_state', self.battery_callback, qos_profile_sensor_data)
-        self.create_subscription(LaserScan, '/scan', self.scan_callback, qos_profile_sensor_data)
         self.create_subscription(Int32, '/system_mode', self.system_mode_callback, qos_profile_sensor_data)
         self.create_subscription(Int32, '/delay_count', self.delay_count_callback, qos_profile_sensor_data)
         self.create_subscription(Float32MultiArray, '/pid_target', self.pid_target_callback, qos_profile_sensor_data)
@@ -160,10 +158,6 @@ class ESP32SerialNode(Node):
     def battery_callback(self, msg):
         self.state['battery'] = msg
         self.msg_counts['battery'] += 1
-
-    def scan_callback(self, msg):
-        self.state['scan'] = msg
-        self.msg_counts['scan'] += 1
 
     def system_mode_callback(self, msg):
         self.state['system_mode'] = msg.data
@@ -257,15 +251,6 @@ class ESP32SerialNode(Node):
         else:
             lines.append("[Joints]  No Data")
 
-        # 7. LaserScan
-        scan = self.state['scan']
-        if scan is not None and len(scan.ranges) > 0:
-            valid_ranges = [r for r in scan.ranges if scan.range_min <= r <= scan.range_max]
-            pt_count = len(scan.ranges)
-            avg_range = sum(valid_ranges) / len(valid_ranges) if len(valid_ranges) > 0 else 0.0
-            lines.append(f"[Lidar]   Points: {pt_count:<6} | Avg Range: {avg_range:.2f} m (range: {scan.range_min:.2f}m - {scan.range_max:.2f}m)")
-        else:
-            lines.append("[Lidar]   No Data")
 
         # 8. PID Target Array
         pt = self.state['pid_target']
