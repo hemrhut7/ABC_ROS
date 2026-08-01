@@ -20,6 +20,9 @@ log/
 env/
 venv/
 
+# Log Recordings
+/ros2_bag
+
 # Agent settings & scratchpad
 .agents/
 .agent_scratchpad/

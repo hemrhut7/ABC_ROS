@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 import math
+import os
+import signal
+import subprocess
+from datetime import datetime
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
@@ -47,7 +51,50 @@ class ESP32SerialNode(Node):
         self.declare_parameter('display_rate', 1.0) # Hz for terminal print
         self.display_rate = self.get_parameter('display_rate').value
 
+        # Auto Record Parameters
+        self.declare_parameter('auto_record', True)
+        self.declare_parameter('record_output_dir', 'ros2_bag')
+        self.declare_parameter('record_topics', [
+            '/imu/data_raw',
+            '/imu/mag',
+            '/baro/pressure',
+            '/baro/temperature',
+            '/joint_states',
+            '/battery_state',
+            '/system_mode',
+            '/pid_target',
+            '/gnss/fix',
+            '/tf_static'
+        ])
+
+        self.auto_record = self.get_parameter('auto_record').value
+        raw_dir = self.get_parameter('record_output_dir').value
+
+        # Automatic path mapping for Docker container vs Host
+        if os.path.exists('/workspace') and os.path.isdir('/workspace'):
+            # Running inside Docker container: force saving to /workspace/ros2_bag so it maps to Host's ~/ROS_ABC/ros2_bag
+            if raw_dir.startswith('/home/hank/ROS_ABC'):
+                target_dir = raw_dir.replace('/home/hank/ROS_ABC', '/workspace', 1)
+            elif os.path.isabs(raw_dir) and not raw_dir.startswith('/workspace'):
+                target_dir = os.path.join('/workspace', 'ros2_bag')
+            else:
+                target_dir = os.path.join('/workspace', raw_dir.lstrip('/'))
+        else:
+            # Running directly on Host
+            expanded = os.path.expanduser(raw_dir)
+            if os.path.isabs(expanded):
+                target_dir = expanded
+            else:
+                target_dir = os.path.join('/home/hank/ROS_ABC', expanded)
+
+        self.record_output_dir = os.path.abspath(target_dir)
+        self.record_topics = self.get_parameter('record_topics').value
+        self.record_process = None
+
         self.get_logger().info(f"Starting ESP32 Serial/Telemetry Node with display rate: {self.display_rate} Hz")
+
+        if self.auto_record:
+            self.start_rosbag_recording()
 
         # Local state database for telemetry
         self.state = {
@@ -233,18 +280,64 @@ class ESP32SerialNode(Node):
         print("\033[H\033[J", end="")
         print("\n".join(lines))
 
+    def start_rosbag_recording(self):
+        try:
+            os.makedirs(self.record_output_dir, exist_ok=True)
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            bag_name = f"rosbag2_{timestamp}"
+            bag_path = os.path.join(self.record_output_dir, bag_name)
+
+            import shutil
+            ros2_exec = shutil.which('ros2')
+            if not ros2_exec:
+                for candidate in ['/opt/ros/humble/install/bin/ros2', '/opt/ros/humble/bin/ros2']:
+                    if os.path.exists(candidate):
+                        ros2_exec = candidate
+                        break
+            if not ros2_exec:
+                ros2_exec = 'ros2'
+
+            cmd = [ros2_exec, 'bag', 'record', '-o', bag_path] + list(self.record_topics)
+            self.get_logger().info(f"[Auto Record] Starting rosbag recording -> {bag_path}")
+            self.get_logger().info(f"[Auto Record] Exec: {ros2_exec} | Target topics: {self.record_topics}")
+
+            self.record_process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.STDOUT,
+                preexec_fn=os.setsid
+            )
+        except Exception as e:
+            self.get_logger().error(f"[Auto Record] Failed to start rosbag recording: {e}")
+
+    def stop_rosbag_recording(self):
+        if self.record_process and self.record_process.poll() is None:
+            self.get_logger().info("[Auto Record] Stopping rosbag recording process cleanly...")
+            try:
+                os.killpg(os.getpgid(self.record_process.pid), signal.SIGINT)
+                self.record_process.wait(timeout=5)
+                self.get_logger().info("[Auto Record] Rosbag recording saved successfully.")
+            except Exception as e:
+                self.get_logger().warn(f"[Auto Record] Error stopping rosbag record process: {e}")
+            self.record_process = None
+
+    def destroy_node(self):
+        self.stop_rosbag_recording()
+        super().destroy_node()
+
 def main(args=None):
     rclpy.init(args=args)
     node = ESP32SerialNode()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
-        node.get_logger().info("KeyboardInterrupt: Shutting down esp32_serial_node.")
+        pass
     except Exception as e:
-        node.get_logger().error(f"Unexpected error: {e}")
+        print(f"Unexpected error: {e}")
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
