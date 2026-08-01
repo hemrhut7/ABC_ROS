@@ -36,12 +36,12 @@ def generate_launch_description():
         ),
         
         # 3. INS EKF Fusion Node
-        # Node(
-        #     package='ins_ekf',
-        #     executable='ins_ekf_node',
-        #     name='ins_ekf_node',
-        #     output='screen',
-        #     parameters=[params_file]
-        # )
+        Node(
+            package='ins_ekf',
+            executable='ins_ekf_node',
+            name='ins_ekf_node',
+            output='screen',
+            parameters=[params_file]
+        )
     ])
 

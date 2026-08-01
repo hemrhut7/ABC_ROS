@@ -1,6 +1,7 @@
 import os
 import sys
 import numpy as np
+from scipy.spatial.transform import Rotation
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Imu, NavSatFix, MagneticField, FluidPressure
@@ -63,6 +64,7 @@ class InsEkfNode(Node):
         self.latest_mag = None
         self.latest_baro = None
         self.latest_vel = None
+        self.latest_w_flu = np.zeros(3)
         
         # Flags to trigger update
         self.new_gnss = False
@@ -105,7 +107,7 @@ class InsEkfNode(Node):
         self.get_logger().info(f"INS EKF Node started in mode {mode}")
 
     def gnss_callback(self, msg):
-        if msg.status.status < 0: # No fix
+        if msg.status.status < 0 or np.isnan(msg.latitude) or np.isnan(msg.longitude): # No fix
             return
         self.latest_gnss = msg
         self.new_gnss = True
@@ -126,7 +128,8 @@ class InsEkfNode(Node):
             self.ref_lla_rad = pos0
 
     def mag_callback(self, msg):
-        self.latest_mag = np.array([msg.magnetic_field.x, msg.magnetic_field.y, msg.magnetic_field.z])
+        # Convert ROS standard FLU (x forward, y left, z up) to EKF standard RFU (x right, y forward, z up)
+        self.latest_mag = np.array([-msg.magnetic_field.y, msg.magnetic_field.x, msg.magnetic_field.z])
         self.new_mag = True
 
     def baro_callback(self, msg):
@@ -141,10 +144,24 @@ class InsEkfNode(Node):
 
     def imu_callback(self, msg):
         if not self.initialized:
-            return
+            if not self.get_parameter('enable_gnss_pos').value:
+                # If GNSS is disabled, initialize position at origin (0, 0, 0)
+                pos0 = np.array([0.0, 0.0, 0.0])
+                self.kf.setInitStatus(
+                    pos0, np.zeros(3), np.zeros(3),
+                    std_pos=5.0, std_vel=0.5, std_ver_ori=np.deg2rad(1.0), std_yaw=np.deg2rad(30.0)
+                )
+                self.initialized = True
+                self.ref_lla_rad = pos0
+                self.get_logger().info("EKF Initialized without GNSS (default origin LLA 0,0,0)")
+            else:
+                return
 
         curr_t = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
         
+        # Save raw angular velocity in FLU frame for Odometry msg
+        self.latest_w_flu = np.array([msg.angular_velocity.x, msg.angular_velocity.y, msg.angular_velocity.z])
+
         # Prepare inputs for kf.run
         # Convert ROS standard FLU (x forward, y left, z up) to EKF standard RFU (x right, y forward, z up)
         # x_rfu = -y_flu, y_rfu = x_flu, z_rfu = z_flu
@@ -162,9 +179,9 @@ class InsEkfNode(Node):
                                  np.deg2rad(self.latest_gnss.longitude), 
                                  self.latest_gnss.altitude])
             if self.latest_gnss.position_covariance_type > 0:
-                pos_qlt = np.sqrt(np.array([self.latest_gnss.position_covariance[0], 
-                                            self.latest_gnss.position_covariance[4], 
-                                            self.latest_gnss.position_covariance[8]]))
+                cov = self.latest_gnss.position_covariance
+                if cov[0] > 0 and cov[4] > 0 and cov[8] > 0:
+                    pos_qlt = np.sqrt(np.array([cov[0], cov[4], cov[8]]))
             num_gnss = 10 
         
         mag = self.latest_mag if self.latest_mag is not None else np.zeros(3)
@@ -175,7 +192,7 @@ class InsEkfNode(Node):
         in_zupt_hor = False
         if self.get_parameter('enable_zupt_hor').value and self.latest_vel is not None:
             # Prevent stale velocity values from triggering false ZUPT locks
-            if (curr_t - self.latest_vel_time) < 0.5:
+            if abs(curr_t - self.latest_vel_time) < 0.5:
                 encoder_speed = abs(self.latest_vel[0])
                 yaw_rate = abs(w[2])
                 in_zupt_hor = (encoder_speed <= 0.05 and yaw_rate <= np.deg2rad(1.0))
@@ -193,7 +210,6 @@ class InsEkfNode(Node):
             in_nhc=self.get_parameter('enable_nhc').value,
             in_zupt_hor=in_zupt_hor
         )
-
 
         # Reset flags
         self.new_gnss = False
@@ -218,23 +234,32 @@ class InsEkfNode(Node):
         R_rfu2enu = self.kf.me.getDCM()
         R_b2w = R_rfu2enu @ self.R_flu2rfu
         
-        # Convert rotation matrix to quaternion
+        # Convert rotation matrix to quaternion safely
         q = self.rotation_matrix_to_quaternion(R_b2w)
         
+        # ROS nav_msgs/Odometry convention:
+        # odom.pose is in header.frame_id (map frame, ENU)
+        # odom.twist is in child_frame_id (base_link frame, FLU)
+        vel_flu = R_b2w.T @ vel_enu
+
         # 3. Create messages
         odom = Odometry()
         odom.header.stamp = stamp
         odom.header.frame_id = self.get_parameter('map_frame').value
         odom.child_frame_id = self.get_parameter('base_link_frame').value
         
-        odom.pose.pose.position.x = pos_enu[0]
-        odom.pose.pose.position.y = pos_enu[1]
-        odom.pose.pose.position.z = pos_enu[2]
+        odom.pose.pose.position.x = float(pos_enu[0])
+        odom.pose.pose.position.y = float(pos_enu[1])
+        odom.pose.pose.position.z = float(pos_enu[2])
         odom.pose.pose.orientation = q
         
-        odom.twist.twist.linear.x = vel_enu[0]
-        odom.twist.twist.linear.y = vel_enu[1]
-        odom.twist.twist.linear.z = vel_enu[2]
+        odom.twist.twist.linear.x = float(vel_flu[0])
+        odom.twist.twist.linear.y = float(vel_flu[1])
+        odom.twist.twist.linear.z = float(vel_flu[2])
+
+        odom.twist.twist.angular.x = float(self.latest_w_flu[0])
+        odom.twist.twist.angular.y = float(self.latest_w_flu[1])
+        odom.twist.twist.angular.z = float(self.latest_w_flu[2])
         
         self.odom_pub.publish(odom)
         
@@ -247,40 +272,15 @@ class InsEkfNode(Node):
             t = TransformStamped()
             t.header = odom.header
             t.child_frame_id = odom.child_frame_id
-            t.transform.translation.x = pos_enu[0]
-            t.transform.translation.y = pos_enu[1]
-            t.transform.translation.z = pos_enu[2]
+            t.transform.translation.x = float(pos_enu[0])
+            t.transform.translation.y = float(pos_enu[1])
+            t.transform.translation.z = float(pos_enu[2])
             t.transform.rotation = q
             self.tf_broadcaster.sendTransform(t)
 
     def rotation_matrix_to_quaternion(self, R):
-        tr = np.trace(R)
-        if tr > 0:
-            S = np.sqrt(tr + 1.0) * 2
-            qw = 0.25 * S
-            qx = (R[2, 1] - R[1, 2]) / S
-            qy = (R[0, 2] - R[2, 0]) / S
-            qz = (R[1, 0] - R[0, 1]) / S
-        elif (R[0, 0] > R[1, 1]) and (R[0, 0] > R[2, 2]):
-            S = np.sqrt(1.0 + R[0, 0] - R[1, 1] - R[2, 2]) * 2
-            qw = (R[2, 1] - R[1, 2]) / S
-            qx = 0.25 * S
-            qy = (R[0, 1] + R[1, 0]) / S
-            qz = (R[0, 2] + R[2, 0]) / S
-        elif R[1, 1] > R[2, 2]:
-            S = np.sqrt(1.0 + R[1, 1] - R[0, 0] - R[2, 2]) * 2
-            qw = (R[0, 2] - R[2, 0]) / S
-            qx = (R[0, 1] + R[1, 0]) / S
-            qy = 0.25 * S
-            qz = (R[1, 2] + R[2, 1]) / S
-        else:
-            S = np.sqrt(1.0 + R[2, 2] - R[0, 0] - R[1, 1]) * 2
-            qw = (R[1, 0] - R[0, 1]) / S
-            qx = (R[0, 2] + R[2, 0]) / S
-            qy = (R[1, 2] + R[2, 1]) / S
-            qz = 0.25 * S
-        
-        return Quaternion(x=qx, y=qy, z=qz, w=qw)
+        quat = Rotation.from_matrix(R).as_quat()  # [x, y, z, w]
+        return Quaternion(x=float(quat[0]), y=float(quat[1]), z=float(quat[2]), w=float(quat[3]))
 
 def main(args=None):
     rclpy.init(args=args)
@@ -295,3 +295,4 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
+
