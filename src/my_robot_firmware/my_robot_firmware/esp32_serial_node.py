@@ -67,7 +67,11 @@ class ESP32SerialNode(Node):
             '/tf_static'
         ])
 
-        self.auto_record = self.get_parameter('auto_record').value
+        val = self.get_parameter('auto_record').value
+        if isinstance(val, str):
+            self.auto_record = val.lower() in ('true', '1', 'yes')
+        else:
+            self.auto_record = bool(val)
         raw_dir = self.get_parameter('record_output_dir').value
 
         # Automatic path mapping for Docker container vs Host

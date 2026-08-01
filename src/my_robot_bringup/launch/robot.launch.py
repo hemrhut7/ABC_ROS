@@ -1,4 +1,6 @@
 from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 import os
 from ament_index_python.packages import get_package_share_directory
@@ -8,7 +10,15 @@ def generate_launch_description():
     config_dir = os.path.join(get_package_share_directory('my_robot_bringup'), 'config')
     params_file = os.path.join(config_dir, 'params.yaml')
 
+    auto_record_arg = DeclareLaunchArgument(
+        'auto_record',
+        default_value='true',
+        description='Set to "false" to temporarily disable automatic rosbag recording.'
+    )
+
     return LaunchDescription([
+        auto_record_arg,
+
         Node(
             package='micro_ros_agent',
             executable='micro_ros_agent',
@@ -23,7 +33,7 @@ def generate_launch_description():
             executable='esp32_serial_node',
             name='esp32_serial_node',
             output='screen',
-            parameters=[params_file]
+            parameters=[params_file, {'auto_record': LaunchConfiguration('auto_record')}]
         ),
         
         # 2. Camera Image Splitter Node
