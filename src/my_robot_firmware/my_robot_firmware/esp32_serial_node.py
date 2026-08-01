@@ -7,7 +7,7 @@ from rclpy.qos import qos_profile_sensor_data
 # Message type imports
 from sensor_msgs.msg import Imu, JointState, MagneticField, FluidPressure, BatteryState, LaserScan, Temperature
 from std_msgs.msg import Int32, Float32MultiArray
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Twist, TwistStamped
 
 def euler_from_quaternion(x, y, z, w):
     """

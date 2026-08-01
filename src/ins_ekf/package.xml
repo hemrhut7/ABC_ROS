@@ -4,7 +4,7 @@
   <name>ins_ekf</name>
   <version>0.0.0</version>
   <description>INS/GNSS Error State Kalman Filter state estimation package</description>
-  <maintainer email="hank@todo.todo">hank</maintainer>
+  <maintainer email="hemrhut7@gmail.com">hank</maintainer>
   <license>Apache-2.0</license>
 
   <depend>rclpy</depend>

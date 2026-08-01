@@ -4,11 +4,11 @@ import numpy as np
 from scipy.spatial.transform import Rotation
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import Imu, NavSatFix, MagneticField, FluidPressure
+from sensor_msgs.msg import Imu, NavSatFix, MagneticField, FluidPressure, JointState
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import TwistStamped, PoseStamped, Quaternion, TransformStamped
 from tf2_ros import TransformBroadcaster
-from rclpy.time import Time
+from rclpy.qos import qos_profile_sensor_data
 
 # Add project root or submodule to path to import nav_ekf
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -28,11 +28,17 @@ class InsEkfNode(Node):
 
         # --- Parameters ---
         self.declare_parameter('ekf_mode', EKF_MODE.STATE_16)
-        self.declare_parameter('imu_topic', '/imu/data')
+        self.declare_parameter('imu_topic', '/imu/data_raw')
         self.declare_parameter('gnss_topic', '/gnss/fix')
-        self.declare_parameter('mag_topic', '/mag/data')
-        self.declare_parameter('baro_topic', '/pressure')
+        self.declare_parameter('mag_topic', '/imu/mag')
+        self.declare_parameter('baro_topic', '/baro/pressure')
         self.declare_parameter('vel_topic', '/velocity') # Body velocity / Encoder
+        self.declare_parameter('joint_states_topic', '/joint_states')
+        self.declare_parameter('wheel_radius', 0.0325)     # Default 3.25cm
+        self.declare_parameter('wheel_separation', 0.20) # Default 0.20 m
+        self.declare_parameter('left_wheel_name', 'left_wheel')
+        self.declare_parameter('right_wheel_name', 'right_wheel')
+        self.declare_parameter('use_joint_states', True)
         
         self.declare_parameter('enable_gnss_pos', True)
         self.declare_parameter('enable_gnss_vel', True)
@@ -43,7 +49,7 @@ class InsEkfNode(Node):
         self.declare_parameter('enable_zupt_hor', False)
         
         self.declare_parameter('publish_tf', True)
-        self.declare_parameter('map_frame', 'map')
+        self.declare_parameter('map_frame', 'odom')
         self.declare_parameter('base_link_frame', 'base_link')
 
         # --- EKF Initialization ---
@@ -83,21 +89,24 @@ class InsEkfNode(Node):
 
         # --- Subscriptions ---
         self.imu_sub = self.create_subscription(
-            Imu, self.get_parameter('imu_topic').value, self.imu_callback, 10)
+            Imu, self.get_parameter('imu_topic').value, self.imu_callback, qos_profile_sensor_data)
         self.gnss_sub = self.create_subscription(
-            NavSatFix, self.get_parameter('gnss_topic').value, self.gnss_callback, 10)
+            NavSatFix, self.get_parameter('gnss_topic').value, self.gnss_callback, qos_profile_sensor_data)
         
         if self.get_parameter('enable_mag').value:
             self.mag_sub = self.create_subscription(
-                MagneticField, self.get_parameter('mag_topic').value, self.mag_callback, 10)
+                MagneticField, self.get_parameter('mag_topic').value, self.mag_callback, qos_profile_sensor_data)
         
         if self.get_parameter('enable_baro').value:
             self.baro_sub = self.create_subscription(
-                FluidPressure, self.get_parameter('baro_topic').value, self.baro_callback, 10)
+                FluidPressure, self.get_parameter('baro_topic').value, self.baro_callback, qos_profile_sensor_data)
         
         if self.get_parameter('enable_agv').value:
+            if self.get_parameter('use_joint_states').value:
+                self.joint_sub = self.create_subscription(
+                    JointState, self.get_parameter('joint_states_topic').value, self.joint_states_callback, qos_profile_sensor_data)
             self.vel_sub = self.create_subscription(
-                TwistStamped, self.get_parameter('vel_topic').value, self.vel_callback, 10)
+                TwistStamped, self.get_parameter('vel_topic').value, self.vel_callback, qos_profile_sensor_data)
 
         # --- Publishers ---
         self.odom_pub = self.create_publisher(Odometry, 'ins/odometry', 10)
@@ -137,10 +146,29 @@ class InsEkfNode(Node):
         self.new_baro = True
 
     def vel_callback(self, msg):
-        # Body velocity (e.g. from encoder)
+        # Body velocity (e.g. from encoder TwistStamped)
         self.latest_vel = np.array([msg.twist.linear.x, msg.twist.linear.y, msg.twist.linear.z])
         self.latest_vel_time = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
         self.new_vel = True
+
+    def joint_states_callback(self, msg):
+        # Directly compute body velocity from wheel encoder JointState
+        if len(msg.name) >= 2 and len(msg.velocity) >= 2:
+            indices = {name: i for i, name in enumerate(msg.name)}
+            l_name = self.get_parameter('left_wheel_name').value
+            r_name = self.get_parameter('right_wheel_name').value
+            l_idx = indices.get(l_name, 0)
+            r_idx = indices.get(r_name, 1)
+
+            l_vel = msg.velocity[l_idx] if len(msg.velocity) > l_idx else 0.0
+            r_vel = msg.velocity[r_idx] if len(msg.velocity) > r_idx else 0.0
+
+            r = self.get_parameter('wheel_radius').value
+            v_x = r * (l_vel + r_vel) / 2.0
+
+            self.latest_vel = np.array([v_x, 0.0, 0.0])
+            self.latest_vel_time = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+            self.new_vel = True
 
     def imu_callback(self, msg):
         if not self.initialized:

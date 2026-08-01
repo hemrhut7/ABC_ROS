@@ -18,7 +18,6 @@ setup(
         'nav_ekf.utils.plot_utils',
     ],
     package_dir={
-        'ins_ekf': 'ins_ekf',
         'nav_ekf': '../INS_python/nav_ekf',
         'nav_ekf.core': '../INS_python/nav_ekf/core',
         'nav_ekf.filters': '../INS_python/nav_ekf/filters',
@@ -47,7 +46,7 @@ setup(
     ],
     zip_safe=True,
     maintainer='hank',
-    maintainer_email='hank@todo.todo',
+    maintainer_email='hemrhut7@gmail.com',
     description='INS/GNSS Error State Kalman Filter state estimation package',
     license='Apache-2.0',
     tests_require=['pytest'],

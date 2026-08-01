@@ -18,7 +18,7 @@ setup(
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='hank',
-    maintainer_email='hank@todo.todo',
+    maintainer_email='hemrhut7@gmail.com',
     description='Firmware interface and serial telemetry nodes for my_robot',
     license='Apache-2.0',
     tests_require=['pytest'],

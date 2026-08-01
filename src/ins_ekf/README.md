@@ -38,7 +38,7 @@ ros2 launch ins_ekf ins_ekf.launch.py
 ```
 
 ## 5. Subscribed Topics
-- `/imu/data` (`sensor_msgs/msg/Imu`): High-frequency IMU inputs.
+- `/imu/data_raw` (`sensor_msgs/msg/Imu`): High-frequency IMU inputs.
 - `/gnss/fix` (`sensor_msgs/msg/NavSatFix`): GNSS position fix.
 - `/mag/data` (`sensor_msgs/msg/MagneticField`): Magnetometer field data (if enabled).
 - `/pressure` (`sensor_msgs/msg/FluidPressure`): Barometer pressure (if enabled).

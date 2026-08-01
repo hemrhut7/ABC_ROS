@@ -10,8 +10,10 @@ def generate_launch_description():
             output='screen',
             parameters=[{
                 'ekf_mode': 16,
-                'imu_topic': '/imu/data',
+                'imu_topic': '/imu/data_raw',
                 'gnss_topic': '/gnss/fix',
+                'mag_topic': '/imu/mag',
+                'baro_topic': '/baro/pressure',
                 'enable_gnss_pos': True,
                 'enable_mag': True,
                 'enable_baro': True,

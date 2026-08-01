@@ -4,7 +4,7 @@
   <name>my_robot_perception</name>
   <version>0.0.0</version>
   <description>Vision and image processing nodes for my_robot</description>
-  <maintainer email="hank@todo.todo">hank</maintainer>
+  <maintainer email="hemrhut7@gmail.com">hank</maintainer>
   <license>Apache-2.0</license>
 
   <depend>rclpy</depend>

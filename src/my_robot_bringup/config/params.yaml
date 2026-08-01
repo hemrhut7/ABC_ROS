@@ -16,19 +16,23 @@ esp32_serial_node:
 ins_ekf_node:
   ros__parameters:
     ekf_mode: 16
-    imu_topic: "/imu/data"
+    imu_topic: "/imu/data_raw"
     gnss_topic: "/gnss/fix"
-    mag_topic: "/mag/data"
-    baro_topic: "/pressure"
+    mag_topic: "/imu/mag"
+    baro_topic: "/baro/pressure"
     vel_topic: "/velocity"
-    enable_gnss_pos: true
-    enable_gnss_vel: true
-    enable_mag: true
+    joint_states_topic: "/joint_states"
+    wheel_radius: 0.0325
+    wheel_separation: 0.20
+    use_joint_states: true
+    enable_gnss_pos: false
+    enable_gnss_vel: false
+    enable_mag: false
     enable_baro: true
     enable_agv: true
-    enable_nhc: false
-    enable_zupt_hor: false
+    enable_nhc: true
+    enable_zupt_hor: true
     publish_tf: true
-    map_frame: "map"
+    map_frame: "odom"
     base_link_frame: "base_link"
 
