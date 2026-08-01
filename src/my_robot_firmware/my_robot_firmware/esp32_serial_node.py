@@ -78,9 +78,9 @@ class ESP32SerialNode(Node):
         self.create_subscription(Int32, '/delay_count', self.delay_count_callback, qos_profile_sensor_data)
         self.create_subscription(Float32MultiArray, '/pid_target', self.pid_target_callback, qos_profile_sensor_data)
 
-        # Initialize Publishers (sending command packets back to ESP32 micro-ROS)
-        self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
-        self.cmd_mode_pub = self.create_publisher(Int32, '/cmd_mode', 10)
+        # Initialize Publishers (sending command packets back to ESP32 micro-ROS) - DISABLED to prevent accidental command transmission
+        # self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
+        # self.cmd_mode_pub = self.create_publisher(Int32, '/cmd_mode', 10)
 
         # Setup periodic display timer
         self.timer = self.create_timer(1.0 / self.display_rate, self.display_telemetry)
@@ -126,19 +126,19 @@ class ESP32SerialNode(Node):
         self.state['pid_target'] = msg.data
         self.msg_counts['pid_target'] += 1
 
-    # Commands publisher helper API
+    # Commands publisher helper API (DISABLED to prevent accidental command transmission)
     def publish_cmd_vel(self, linear_x: float, angular_z: float):
-        msg = Twist()
-        msg.linear.x = linear_x
-        msg.angular.z = angular_z
-        self.cmd_vel_pub.publish(msg)
-        self.get_logger().info(f"Published cmd_vel: linear={linear_x}, angular={angular_z}")
+        # msg = Twist()
+        # msg.linear.x = linear_x
+        # msg.angular.z = angular_z
+        # self.cmd_vel_pub.publish(msg)
+        self.get_logger().warn("publish_cmd_vel is currently DISABLED to prevent accidental command transmission.")
 
     def publish_cmd_mode(self, mode: int):
-        msg = Int32()
-        msg.data = mode
-        self.cmd_mode_pub.publish(msg)
-        self.get_logger().info(f"Published cmd_mode: mode={mode}")
+        # msg = Int32()
+        # msg.data = mode
+        # self.cmd_mode_pub.publish(msg)
+        self.get_logger().warn("publish_cmd_mode is currently DISABLED to prevent accidental command transmission.")
 
     # Telemetry dashboard printing
     def display_telemetry(self):
