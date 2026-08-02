@@ -19,7 +19,7 @@ sys.path.insert(0, parent_dir)
 
 from nav_ekf.filters.ins_gnss_kf import INS_GNSS
 from nav_ekf.sensors.params import MTI7_params
-from nav_ekf.filters.kalman_filter import EKF_MODE
+from nav_ekf.filters.constants import EKF_MODE
 from nav_ekf.core.coordinate_transformation import llh2ENU
 
 class InsEkfNode(Node):

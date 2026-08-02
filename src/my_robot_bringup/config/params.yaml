@@ -11,7 +11,7 @@ image_splitter_node:
 
 esp32_serial_node:
   ros__parameters:
-    display_rate: 1.0
+    display_rate: 0.2
     auto_record: true
     record_output_dir: "ros2_bag"
     record_topics:
