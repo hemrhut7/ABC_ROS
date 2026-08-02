@@ -1,88 +1,92 @@
 # 📸 My Robot Perception Package (my_robot_perception)
 
-本套件負責機器人雙目相機影像的擷取、切割、壓縮傳輸與相機資訊發布，為機器人系統提供核心的視覺感知能力。
+本套件負責機器人雙目相機影像擷取、切割、JPEG 壓縮傳輸、相機資訊發布以及 N10 LiDAR 光學雷達資料處理。
+
+> [!NOTE]
+> 🚀 **性能優化升級 (C++ / rclcpp)**：本套件已全面採用 ROS 2 C++ API (`rclcpp`) 重構，取代原先 Python 實現，大幅降低 CPU 資源佔用，提升雙目 60 FPS 影像處理與光學雷達封包解析效能。
 
 ---
 
 ## 🚀 執行與部署教學
 
-本套件之節點建議運行於 NVIDIA Jetson 之 Docker 容器環境中，以確保與 Host 端的 V4L2 相機硬體順暢串接。
+本套件之節點包含兩個核心 C++ 可執行檔：
+1. `image_splitter_node`：雙目相機影像擷取與切割節點
+2. `n10_lidar_node`：N10 光學雷達 Serial 驅動與 `/scan` 發布節點
 
-### 執行相機分割節點
+### 1. 執行相機分割節點
 
 ```bash
 ros2 run my_robot_perception image_splitter_node
 ```
 
 #### 正常啟動輸出：
+```text
+[INFO] [image_splitter_node]: Initializing Image Splitter Node (rclcpp C++):
+  Device: /dev/video0
+  Target Resolution: 1280x480
+  Target FPS: 60
+  Target Format (FOURCC): MJPG
+  Frame ID: camera_link
+  Rotation Angle: 180
+  JPEG Quality: 60
+[INFO] [image_splitter_node]: Camera opened successfully.
+  Actual Format: MJPG
+  Actual Resolution: 1280x480
+  Actual FPS: 60.0
 ```
-Initializing Image Splitter Node...
-Camera opened successfully. Actual Resolution: 1280x480 Actual FPS: 60
-```
+
 > [!NOTE]
-> 節點預設會讀取 `/dev/video0` 裝置，並以解析度 `1280x480`（MJPG）、FPS `60` 進行雙目擷取與分割。若需要調整參數，請至 `my_robot_bringup` 的 [params.yaml](file:///home/hank/ROS_ABC/src/my_robot_bringup/config/params.yaml) 中設定。
+> 節點預設讀取 `/dev/video0`，並以解析度 `1280x480` (MJPG)、FPS `60` 進行雙目擷取與分割。參數可於 `my_robot_bringup` 的 [params.yaml](file:///home/hank/Github/ABC_ROS/src/my_robot_bringup/config/params.yaml) 中動態配置。
 
 ---
 
-### 驗證 Topic 數據輸出
-請在 PC 端透過另一個 SSH 連線，或使用 TMUX 開啟新視窗，連入同一個運行中的容器：
+### 2. 執行 N10 LiDAR 節點
 
 ```bash
-# 1. 查詢運行中的容器 ID
-docker ps
-
-# 2. 進入該容器的 Bash 終端機
-docker exec -it <您的容器ID或名稱> bash
-
-# 3. 載入 ROS 2 與工作空間環境變數
-source /opt/ros/humble/setup.bash
-source /workspace/install/setup.bash
+ros2 run my_robot_perception n10_lidar_node
 ```
 
-#### 驗證指令與預期結果：
-1. **確認 Topic 列表**：
-   ```bash
-   ros2 topic list
-   ```
-   您應會看到已成功發布以下主題：
-   - `/camera/stereo/image_raw`（雙目原始拼接畫面）
-   - `/camera/left/image_raw`（左眼獨立分割畫面）
-   - `/camera/left/image_raw/compressed`（左眼壓縮畫面）
-   - `/camera/left/camera_info`（左相機校正資訊）
-   - `/camera/right/image_raw`（右眼獨立分割畫面）
-   - `/camera/right/image_raw/compressed`（右眼壓縮畫面）
-   - `/camera/right/camera_info`（右相機校正資訊）
+#### 正常啟動輸出：
+```text
+[INFO] [n10_lidar_node]: Initializing N10 LiDAR Node (rclcpp C++ Standalone):
+  Target Port: Auto-detecting USB port
+  Baud Rate: 230400
+  Frame ID: laser_frame
+  Output Topic: /scan
+  Range Min/Max: 0.05m / 12.00m
+[INFO] [n10_lidar_node]: Connected successfully to LiDAR at port: /dev/ttyUSB0
+```
 
-2. **檢查發布更新率 (Hz)**：
-   ```bash
-   ros2 topic hz /camera/left/image_raw
-   ```
-   影像發布頻率應穩定維持在約 **60.0 Hz**。
+---
+
+### 3. 驗證 Topic 數據輸出
+
+```bash
+# 檢查 Topic 列表
+ros2 topic list
+
+# 檢查影像與雷達更新頻率
+ros2 topic hz /camera/left/image_raw
+ros2 topic hz /scan
+```
+
+已發布的主題包含：
+- `/camera/stereo/image_raw`（雙目原始畫面）
+- `/camera/left/image_raw`（左眼獨立分割畫面）
+- `/camera/left/image_raw/compressed`（左眼 JPEG 壓縮畫面）
+- `/camera/left/camera_info`（左相機校正資訊）
+- `/camera/right/image_raw`（右眼獨立分割畫面）
+- `/camera/right/image_raw/compressed`（右眼 JPEG 壓縮畫面）
+- `/camera/right/camera_info`（右相機校正資訊）
+- `/scan`（N10 360 度 LaserScan 點雲數據）
 
 ---
 
 ## 💻 Foxglove Studio 視覺化監控配置
 
-Foxglove Studio 適合用於即時觀看機器人雙目影像、點雲及感測器姿態。以下是連接與配置步驟：
+Foxglove Studio 適合用於即時觀看機器人雙目影像、雷達點雲 `/scan` 及感測器姿態。
 
-### 1. Jetson 容器端：安裝並啟動 Foxglove 橋接節點
-在容器內啟動 `foxglove_bridge`：
+### 啟動 Foxglove 橋接節點：
 ```bash
-# 若未安裝橋接套件，請先執行安裝
-sudo apt update && sudo apt install -y ros-humble-foxglove-bridge
-
-# 啟動橋接節點
 ros2 launch foxglove_bridge foxglove_bridge_launch.xml
 ```
-
-可指定topic進行發布，降低系統負載
-```bash
-ros2 launch foxglove_bridge foxglove_bridge_launch.xml topic_whitelist:="['/camera/right/image_raw']"
-```
-
-### 2. PC 端：連線與顯示影像
-1. 前往官網下載並開啟 Windows 版 [Foxglove Studio](https://foxglove.dev/)。
-2. 點選 **Open Connection**，連線類型選擇 **Foxglove WebSocket**。
-3. 輸入連線網址：`ws://<Jetson_IP>:8765`（請將 `<Jetson_IP>` 替換為您的 Jetson 實際 IP），並點選 **Connect**。
-4. 在 Foxglove 介面中新增一個 **Image Panel**。
-5. 將主題選擇設為 `/camera/left/image_raw/compressed` 或 `/camera/right/image_raw/compressed`，即可即時瀏覽切割後的 1280x720 影像畫面。

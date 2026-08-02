@@ -3,16 +3,18 @@
 <package format="3">
   <name>my_robot_perception</name>
   <version>0.0.0</version>
-  <description>Vision and image processing nodes for my_robot</description>
+  <description>Vision and image processing nodes for my_robot (C++ rclcpp)</description>
   <maintainer email="hemrhut7@gmail.com">hank</maintainer>
   <license>Apache-2.0</license>
 
-  <depend>rclpy</depend>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
   <depend>sensor_msgs</depend>
   <depend>std_msgs</depend>
   <depend>cv_bridge</depend>
 
   <export>
-    <build_type>ament_python</build_type>
+    <build_type>ament_cmake</build_type>
   </export>
 </package>
