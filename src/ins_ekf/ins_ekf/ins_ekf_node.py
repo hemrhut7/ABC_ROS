@@ -5,7 +5,7 @@ from scipy.spatial.transform import Rotation
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Imu, NavSatFix, MagneticField, FluidPressure, JointState
-from nav_msgs.msg import Odometry
+from nav_msgs.msg import Odometry, Path
 from geometry_msgs.msg import TwistStamped, PoseStamped, Quaternion, TransformStamped
 from tf2_ros import TransformBroadcaster
 from rclpy.qos import qos_profile_sensor_data
@@ -126,6 +126,8 @@ class InsEkfNode(Node):
         # --- Publishers ---
         self.odom_pub = self.create_publisher(Odometry, 'ins/odometry', 10)
         self.pose_pub = self.create_publisher(PoseStamped, 'ins/pose', 10)
+        self.path_pub = self.create_publisher(Path, 'ins/path', 10)
+        self.path_msg = Path()
         self.tf_broadcaster = TransformBroadcaster(self)
 
         self.get_logger().info(f"INS EKF Node started in mode {mode}")
@@ -320,6 +322,13 @@ class InsEkfNode(Node):
         pose.header = odom.header
         pose.pose = odom.pose.pose
         self.pose_pub.publish(pose)
+        
+        # Publish historical trajectory path for RViz2 visualization
+        self.path_msg.header = odom.header
+        self.path_msg.poses.append(pose)
+        if len(self.path_msg.poses) > 3000:
+            self.path_msg.poses.pop(0)
+        self.path_pub.publish(self.path_msg)
         
         if self.get_parameter('publish_tf').value:
             t = TransformStamped()
