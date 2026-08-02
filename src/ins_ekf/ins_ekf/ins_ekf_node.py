@@ -40,13 +40,22 @@ class InsEkfNode(Node):
         self.declare_parameter('right_wheel_name', 'right_wheel')
         self.declare_parameter('use_joint_states', True)
         
-        self.declare_parameter('enable_gnss_pos', True)
-        self.declare_parameter('enable_gnss_vel', True)
-        self.declare_parameter('enable_mag', True)
+        self.declare_parameter('enable_gnss_pos', False)
+        self.declare_parameter('enable_gnss_vel', False)
+        self.declare_parameter('enable_mag', False)
         self.declare_parameter('enable_baro', True)
         self.declare_parameter('enable_agv', True)
+        self.declare_parameter('block_agv_h', False)
+        self.declare_parameter('std_agv', [0.1, 0.1, 10.0])
+        self.declare_parameter('lever_arm_agv', [0.0, 0.0, 0.0])
         self.declare_parameter('enable_nhc', False)
         self.declare_parameter('enable_zupt_hor', False)
+        self.declare_parameter('press_params', 10.0)
+
+        self.declare_parameter('init_cov_p', 5.0)
+        self.declare_parameter('init_cov_v', 0.5)
+        self.declare_parameter('init_cov_att', 3.0)  # Initial pitch/roll covariance (deg)
+        self.declare_parameter('init_cov_yaw', 30.0) # Initial yaw covariance (deg)
         
         self.declare_parameter('publish_tf', True)
         self.declare_parameter('map_frame', 'odom')
@@ -59,8 +68,14 @@ class InsEkfNode(Node):
         
         # Default params (can be updated via ROS params if needed)
         self.kf.setGNSSParams(np.array([1.0, 1.0, 2.0, 0.1, 0.1, 0.2]))
-        self.kf.setAGVParams(lever_arm=(-0.04, 0.23, 0))
-        self.kf.setPressParams(15.0)
+        
+        std_agv = tuple(self.get_parameter('std_agv').value)
+        block_agv_h = self.get_parameter('block_agv_h').value
+        lever_arm_agv = tuple(self.get_parameter('lever_arm_agv').value)
+        self.kf.setAGVParams(std_vel=std_agv, is_block_hei=block_agv_h, lever_arm=lever_arm_agv)
+        
+        press_params = float(self.get_parameter('press_params').value)
+        self.kf.setPressParams(press_params)
         
         self.initialized = False
         self.last_imu_time = None
@@ -127,9 +142,14 @@ class InsEkfNode(Node):
             vel0 = np.zeros(3)
             att0 = np.array([0.0, 0.0, 0.0]) # Will be improved by static alignment or mag
             
+            std_p = float(self.get_parameter('init_cov_p').value)
+            std_v = float(self.get_parameter('init_cov_v').value)
+            std_att = np.deg2rad(float(self.get_parameter('init_cov_att').value))
+            std_yaw = np.deg2rad(float(self.get_parameter('init_cov_yaw').value))
+            
             self.kf.setInitStatus(
                 pos0, vel0, att0,
-                std_pos=5.0, std_vel=0.5, std_ver_ori=np.deg2rad(1.0), std_yaw=np.deg2rad(30.0)
+                std_pos=std_p, std_vel=std_v, std_ver_ori=std_att, std_yaw=std_yaw
             )
             self.initialized = True
             self.get_logger().info(f"EKF Initialized at LLA: {msg.latitude}, {msg.longitude}, {msg.altitude}")
@@ -175,9 +195,14 @@ class InsEkfNode(Node):
             if not self.get_parameter('enable_gnss_pos').value:
                 # If GNSS is disabled, initialize position at origin (0, 0, 0)
                 pos0 = np.array([0.0, 0.0, 0.0])
+                std_p = float(self.get_parameter('init_cov_p').value)
+                std_v = float(self.get_parameter('init_cov_v').value)
+                std_att = np.deg2rad(float(self.get_parameter('init_cov_att').value))
+                std_yaw = np.deg2rad(float(self.get_parameter('init_cov_yaw').value))
+
                 self.kf.setInitStatus(
                     pos0, np.zeros(3), np.zeros(3),
-                    std_pos=5.0, std_vel=0.5, std_ver_ori=np.deg2rad(1.0), std_yaw=np.deg2rad(30.0)
+                    std_pos=std_p, std_vel=std_v, std_ver_ori=std_att, std_yaw=std_yaw
                 )
                 self.initialized = True
                 self.ref_lla_rad = pos0
