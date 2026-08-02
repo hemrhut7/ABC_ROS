@@ -14,10 +14,21 @@ def generate_launch_description():
                 'gnss_topic': '/gnss/fix',
                 'mag_topic': '/imu/mag',
                 'baro_topic': '/baro/pressure',
-                'enable_gnss_pos': True,
-                'enable_mag': True,
+                'enable_gnss_pos': False,
+                'enable_gnss_vel': False,
+                'enable_mag': False,
                 'enable_baro': True,
                 'enable_agv': True,
+                'block_agv_h': False,
+                'std_agv': [0.1, 0.1, 10.0],
+                'lever_arm_agv': [0.0, 0.0, 0.0],
+                'enable_nhc': False,
+                'enable_zupt_hor': False,
+                'press_params': 10.0,
+                'init_cov_p': 5.0,
+                'init_cov_v': 0.5,
+                'init_cov_att': 3.0,
+                'init_cov_yaw': 30.0,
             }]
         )
     ])

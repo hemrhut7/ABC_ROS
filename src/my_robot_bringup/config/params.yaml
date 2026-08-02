@@ -43,8 +43,16 @@ ins_ekf_node:
     enable_mag: false
     enable_baro: true
     enable_agv: true
-    enable_nhc: true
-    enable_zupt_hor: true
+    block_agv_h: false
+    std_agv: [0.1, 0.1, 10.0]
+    lever_arm_agv: [0.0, 0.0, 0.0]
+    enable_nhc: false
+    enable_zupt_hor: false
+    press_params: 10.0
+    init_cov_p: 5.0
+    init_cov_v: 0.5
+    init_cov_att: 3.0
+    init_cov_yaw: 30.0
     publish_tf: true
     map_frame: "odom"
     base_link_frame: "base_link"
