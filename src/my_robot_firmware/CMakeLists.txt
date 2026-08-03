@@ -23,8 +23,21 @@ ament_target_dependencies(esp32_serial_node
   geometry_msgs
 )
 
+add_executable(data_logger_node src/data_logger_node.cpp)
+target_include_directories(data_logger_node PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+ament_target_dependencies(data_logger_node
+  rclcpp
+  sensor_msgs
+  std_msgs
+  geometry_msgs
+)
+
 install(TARGETS
   esp32_serial_node
+  data_logger_node
   DESTINATION lib/${PROJECT_NAME}
 )
 

@@ -239,7 +239,7 @@ private:
 class N10LidarNode : public rclcpp::Node {
 public:
   N10LidarNode()
-  : Node("n10_lidar_node"), scan_count_(0)
+  : Node("n10_lidar_node"), scan_count_(0), is_connected_(false)
   {
     // Declare parameters
     this->declare_parameter<std::string>("port", "");
@@ -250,7 +250,7 @@ public:
     this->declare_parameter<double>("range_max", 12.0);
 
     // Read parameters
-    std::string port_param = this->get_parameter("port").as_string();
+    port_param_ = this->get_parameter("port").as_string();
     baud_rate_ = this->get_parameter("baud_rate").as_int();
     frame_id_ = this->get_parameter("frame_id").as_string();
     topic_name_ = this->get_parameter("topic_name").as_string();
@@ -264,7 +264,7 @@ public:
       "  Frame ID: %s\n"
       "  Output Topic: %s\n"
       "  Range Min/Max: %.2fm / %.2fm",
-      port_param.empty() ? "Auto-detecting USB port" : port_param.c_str(),
+      port_param_.empty() ? "Auto-detecting USB port" : port_param_.c_str(),
       baud_rate_, frame_id_.c_str(), topic_name_.c_str(),
       range_min_, range_max_);
 
@@ -272,17 +272,16 @@ public:
     scan_pub_ = this->create_publisher<sensor_msgs::msg::LaserScan>(topic_name_, 10);
 
     // Hardware driver
-    driver_ = std::make_unique<N10LidarDriver>(port_param, baud_rate_);
-    if (!driver_->connect()) {
-      RCLCPP_ERROR(this->get_logger(),
-        "Failed to connect to N10 LiDAR hardware. "
-        "Please verify USB physical connection, permissions (dialout/tty), or device power.");
-      throw std::runtime_error("LiDAR connection failed");
+    driver_ = std::make_unique<N10LidarDriver>(port_param_, baud_rate_);
+    if (driver_->connect()) {
+      is_connected_ = true;
+      last_scan_time_ = std::chrono::steady_clock::now();
+      RCLCPP_INFO(this->get_logger(), "LiDAR connection: ESTABLISHED on port %s", driver_->get_port_name().c_str());
+    } else {
+      RCLCPP_WARN(this->get_logger(),
+        "Initial LiDAR connection failed on port %s. Will retry automatically.",
+        port_param_.empty() ? "auto-detect" : port_param_.c_str());
     }
-
-    RCLCPP_INFO(this->get_logger(), "Connected successfully to LiDAR at port: %s", driver_->get_port_name().c_str());
-
-    last_scan_time_ = std::chrono::steady_clock::now();
 
     // 200 Hz polling timer (5 ms)
     timer_ = this->create_wall_timer(
@@ -299,14 +298,53 @@ public:
 private:
   void poll_lidar() {
     try {
+      if (!driver_ || !driver_->is_connected()) {
+        if (is_connected_) {
+          is_connected_ = false;
+          RCLCPP_WARN(this->get_logger(), "LiDAR connection: LOST (driver disconnected)");
+        }
+
+        // Try reconnection periodically
+        auto now = std::chrono::steady_clock::now();
+        if (std::chrono::duration_cast<std::chrono::seconds>(now - last_reconnect_attempt_).count() >= 2) {
+          last_reconnect_attempt_ = now;
+          if (driver_ && driver_->connect()) {
+            is_connected_ = true;
+            last_scan_time_ = now;
+            RCLCPP_INFO(this->get_logger(), "LiDAR connection: RE-ESTABLISHED on port %s", driver_->get_port_name().c_str());
+          }
+        }
+        return;
+      }
+
       ScanData data;
+      bool got_scan = false;
       while (driver_ && driver_->is_connected() && driver_->get_scan(data)) {
         if (!data.points.empty()) {
           publish_scan(data);
+          got_scan = true;
+        }
+      }
+
+      auto now = std::chrono::steady_clock::now();
+      if (got_scan) {
+        if (!is_connected_) {
+          is_connected_ = true;
+          RCLCPP_INFO(this->get_logger(), "LiDAR connection: ESTABLISHED on port %s", driver_->get_port_name().c_str());
+        }
+      } else if (is_connected_) {
+        // Check timeout
+        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - last_scan_time_).count();
+        if (elapsed >= 3) {
+          is_connected_ = false;
+          RCLCPP_WARN(this->get_logger(), "LiDAR connection: LOST (no scan received for >3s)");
         }
       }
     } catch (const std::exception & e) {
-      RCLCPP_ERROR(this->get_logger(), "Error during LiDAR polling loop: %s", e.what());
+      if (is_connected_) {
+        is_connected_ = false;
+        RCLCPP_WARN(this->get_logger(), "LiDAR connection: LOST (Exception: %s)", e.what());
+      }
     }
   }
 
@@ -370,14 +408,9 @@ private:
     }
 
     scan_pub_->publish(scan_msg);
-
-    if (scan_count_ % 50 == 0) {
-      RCLCPP_INFO(this->get_logger(),
-        "Published scan #%llu: %zu points, Scan Rate: %.1f Hz",
-        static_cast<unsigned long long>(scan_count_), count, scan_time > 0.0 ? 1.0 / scan_time : 0.0);
-    }
   }
 
+  std::string port_param_;
   int baud_rate_;
   std::string frame_id_;
   std::string topic_name_;
@@ -389,7 +422,9 @@ private:
   std::unique_ptr<N10LidarDriver> driver_;
 
   std::chrono::steady_clock::time_point last_scan_time_;
+  std::chrono::steady_clock::time_point last_reconnect_attempt_;
   uint64_t scan_count_;
+  bool is_connected_;
 };
 
 int main(int argc, char ** argv) {
