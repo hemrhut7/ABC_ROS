@@ -10,14 +10,21 @@ def generate_launch_description():
     config_dir = os.path.join(get_package_share_directory('my_robot_bringup'), 'config')
     params_file = os.path.join(config_dir, 'params.yaml')
 
-    auto_record_arg = DeclareLaunchArgument(
-        'auto_record',
+    auto_log_arg = DeclareLaunchArgument(
+        'auto_log',
         default_value='true',
-        description='Set to "false" to temporarily disable automatic rosbag recording.'
+        description='Enable or disable automatic rosbag recording (true/false or enable/disable).'
+    )
+
+    mode_arg = DeclareLaunchArgument(
+        'mode',
+        default_value='total',
+        description='Recording mode: esp32 (data from esp32), lidar (esp32+lidar), camera (esp32+camera), total (esp32+lidar+camera).'
     )
 
     return LaunchDescription([
-        auto_record_arg,
+        auto_log_arg,
+        mode_arg,
 
         Node(
             package='micro_ros_agent',
@@ -33,10 +40,22 @@ def generate_launch_description():
             executable='esp32_serial_node',
             name='esp32_serial_node',
             output='screen',
-            parameters=[params_file, {'auto_record': LaunchConfiguration('auto_record')}]
+            parameters=[params_file]
+        ),
+
+        # 2. Data Logger Node (rosbag recorder)
+        Node(
+            package='my_robot_firmware',
+            executable='data_logger_node',
+            name='data_logger_node',
+            output='screen',
+            parameters=[params_file, {
+                'auto_log': LaunchConfiguration('auto_log'),
+                'mode': LaunchConfiguration('mode')
+            }]
         ),
         
-        # 2. Camera Image Splitter Node
+        # 3. Camera Image Splitter Node
         Node(
             package='my_robot_perception',
             executable='image_splitter_node',
@@ -45,7 +64,7 @@ def generate_launch_description():
             parameters=[params_file]
         ),
 
-        # 3. N10 LiDAR Node
+        # 4. N10 LiDAR Node
         Node(
             package='my_robot_perception',
             executable='n10_lidar_node',
@@ -54,7 +73,7 @@ def generate_launch_description():
             parameters=[params_file]
         ),
         
-        # 4. INS EKF Fusion Node
+        # 5. INS EKF Fusion Node
         Node(
             package='ins_ekf',
             executable='ins_ekf_node',
@@ -63,4 +82,3 @@ def generate_launch_description():
             parameters=[params_file]
         )
     ])
-

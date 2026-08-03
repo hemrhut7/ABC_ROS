@@ -10,21 +10,13 @@ image_splitter_node:
     jpeg_quality: 60
 
 esp32_serial_node:
+  ros__parameters: {}
+
+data_logger_node:
   ros__parameters:
-    display_rate: 0.2
-    auto_record: true
+    auto_log: true
+    mode: "lidar" # Options: esp32, lidar, camera, total
     record_output_dir: "ros2_bag"
-    record_topics:
-      - "/imu/data_raw"
-      - "/imu/mag"
-      - "/baro/pressure"
-      - "/baro/temperature"
-      - "/joint_states"
-      - "/battery_state"
-      - "/system_mode"
-      - "/pid_target"
-      - "/gnss/fix"
-      - "/tf_static"
 
 ins_ekf_node:
   ros__parameters:
