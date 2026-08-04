@@ -53,7 +53,7 @@ n10_lidar_node:
   ros__parameters:
     port: ""
     baud_rate: 230400
-    frame_id: "laser_frame"
+    frame_id: "laser_link"
     topic_name: "/scan"
     range_min: 0.1
     range_max: 12.0

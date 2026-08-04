@@ -34,7 +34,8 @@ RUN pip3 install --no-cache-dir \
     tqdm \
     pygeomag \
     pymavlink \
-    pyyaml
+    pyyaml \
+    netifaces
 
 # 4. Set Workspace Directory
 WORKDIR /workspace
