@@ -63,7 +63,7 @@ def generate_launch_description():
         # 3. Occupancy Grid Node (converts Cartographer submaps to 2D occupancy grid map)
         Node(
             package='cartographer_ros',
-            executable='occupancy_grid_node',
+            executable='cartographer_occupancy_grid_node',
             name='occupancy_grid_node',
             output='screen',
             parameters=[{'use_sim_time': use_sim_time}],

@@ -71,9 +71,26 @@ graph TD
 
 ## 🔨 環境建置與執行教學 (Docker 容器環境)
 
-本專案之主控程式運行於 NVIDIA Jetson 之 Docker 容器環境中，以確保與 Host 硬體（V4L2 相機、Serial 序列埠）的順暢串接。
+本專案之主控程式運行於 NVIDIA Jetson 之 Docker 容器環境中，以確保與 Host 硬體（V4L2 相機、Serial 序列埠）的順暢串接。專案根目錄已提供完整且透明化的 [`Dockerfile`](file:///home/hank/ROS_ABC/Dockerfile)，整合了所有系統依賴與軟體庫。
 
-### Step 1: 啟動 Jetson 專屬 ROS 2 容器
+### Step 1: 建置 Docker 鏡像 (Build Docker Image)
+如需從頭建置或更新開發容器鏡像，請在 Host 端專案根目錄（`~/ROS_ABC`）執行以下建置指令：
+
+```bash
+cd ~/ROS_ABC
+
+# 使用專案根目錄的 Dockerfile 建置鏡像
+docker build -t ros:humble-ros-base-hank -f Dockerfile .
+```
+
+> [!NOTE]
+> **Dockerfile 整合內容**：
+> - **基底鏡像**：繼承官方 `ros:humble-ros-base-l4t-r36.5.0`。
+> - **系統與 ROS 2 依賴**：自動安裝 `libtbb-dev`, `ros-humble-cv-bridge`, `ros-humble-tf2-ros`, `ros-humble-sensor-msgs`, `ros-humble-nav-msgs`, `ros-humble-geometry-msgs`, `ros-humble-cartographer-ros`。
+> - **共享庫自動修復**：內建自動補全 `libtbb.so.2` 符號連結，修復 OpenCV TBB 2020 符號尋找錯誤 (`symbol lookup error`)。
+> - **Python 演算法加速依賴**：自動安裝 `numba` (JIT 加速), `scipy`, `numpy`, `matplotlib`, `pandas`, `tqdm`, `pygeomag`, `pymavlink`, `pyyaml` 等 `ins_ekf` 與 `INS_python` 所需演算法庫。
+
+### Step 2: 啟動 Jetson 專屬 ROS 2 容器
 我們使用 `jetson-containers` 工具鏈，並掛載專案資料夾與設備驅動權限。請在 Jetson Host 端執行：
 
 ```bash
@@ -81,14 +98,15 @@ jetson-containers run \
   --privileged \
   -v /dev:/dev \
   -v ~/ROS_ABC:/workspace \
-  $(autotag ros:humble-ros-base-hank)
+  $(autotag ros:humble-ros-base)
 ```
 
 > [!NOTE]
 > - `--privileged`：提供容器直接讀寫 Host 硬體（如 USB 轉序列埠 `/dev/ttyUSB*`、GPIO UART `/dev/ttyTHS*` 以及 USB 相機 `/dev/video*`）的權限。
 > - `-v ~/ROS_ABC:/workspace`：將專案目錄掛載至容器內的 `/workspace` 路徑，實現即時程式修改與持續編譯。
+> - `$(autotag ros:humble-ros-base)`：自動解析並優先調用本機建立好的 `ros:humble-ros-base-hank` 鏡像。
 
-### Step 2: 在容器內編譯工作空間
+### Step 3: 在容器內編譯工作空間
 進入容器終端機後，執行以下命令進行 Colcon 編譯：
 
 ```bash
@@ -102,7 +120,7 @@ colcon build --symlink-install
 > [!TIP]
 > 由於在編譯時使用了 `--symlink-install` 參數，Python 程式的變更會即時生效，您**不需要**重新執行 `colcon build`！
 
-### Step 3: 載入環境變數
+### Step 4: 載入環境變數
 編譯完成後，必須將工作空間的環境設定檔載入當前 Shell：
 
 ```bash
@@ -110,7 +128,7 @@ source /opt/ros/humble/setup.bash
 source install/setup.bash
 ```
 
-### Step 4: 一鍵啟動機器人系統
+### Step 5: 一鍵啟動機器人系統
 使用 Launch 檔案同時運行 micro-ROS Agent（使用 `/dev/ttyTHS1` GPIO 串列、鮑率 2000000）、遙測監控節點與相機影像切割節點：
 
 ```bash
@@ -125,26 +143,6 @@ ros2 run my_robot_perception image_splitter_node
 ---
 
 ## 🛡️ 核心維運與安全指南
-
-### 1. 使用 TMUX 預防斷線摔車（核心安全機制）
-在無線網路環境開發平衡車或移動機器人時，最常遇到的災難是：Wi-Fi 訊號變弱導致 SSH 連線中斷，使控制程式在背景當機，導致機器人直接摔倒損壞。
-使用 **TMUX** 是解決此問題的最佳保命符！
-
-#### 建立並鎖定背景會話
-在 PC 端透過 SSH 連入 Jetson 後，請輸入：
-```bash
-tmux new -s robot_ws
-```
-這會在 Jetson 系統背景建立名為 `robot_ws` 的獨立會話。**即便 SSH 斷線或關閉終端機，此會話中的 ROS 2 控制節點依然會穩定在背景運作**，不會因斷線而摔車。
-
-#### 常用 TMUX 快捷鍵 (先按 `<kbd>Ctrl</kbd> + <kbd>b</kbd>` 釋放，再按對應按鍵)：
-- `%` : 左右分割視窗（方便一邊看遙測，一邊發送指令）。
-- `"` : 上下分割視窗。
-- `方向鍵` : 在不同分割視窗間切換。
-- `d` : 暫時離開 (Detach) 此會話，使其在背景繼續執行。
-- 重新連回會話：`tmux attach -t robot_ws`。
-
----
 
 ### 2. 獨立啟動 micro-ROS Agent (數據偵錯與硬體切換)
 如果需要測試不同的硬體連線模式（例如從 GPIO UART 切換至 USB 連接），可以手動啟動 micro-ROS Agent。
@@ -230,11 +228,4 @@ sudo nvpmodel -q
 ### 切換至最高效能模式 (Max Performance Mode)
 ```bash
 sudo nvpmodel -m 0
-```
-
-### 執行本機 Gemma-2/Gemma-4 LLM 推理測試 (GGUF)
-在機器人上測試本機大型語言模型邊緣運算，可直接透過 Llama.cpp CLI 載入 GGUF 格式模型並啟用 GPU 加速：
-進入 ```llama.cpp/build/bin```
-```bash
-./llama-cli -hf unsloth/gemma-4-E2B-it-GGUF:UD-Q4_K_XL -cnv --n-gpu-layers 99
 ```
