@@ -229,3 +229,8 @@ sudo nvpmodel -q
 ```bash
 sudo nvpmodel -m 0
 ```
+
+### 切換資料夾的使用者權限
+```
+sudo chown -R hank:hank ros2_bag/
+```

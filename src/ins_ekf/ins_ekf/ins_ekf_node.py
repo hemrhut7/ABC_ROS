@@ -80,6 +80,8 @@ class InsEkfNode(Node):
         self.declare_parameter('enable_nhc', False)
         self.declare_parameter('enable_zupt_hor', False)
         self.declare_parameter('press_params', 10.0)
+        self.declare_parameter('std_mag', 10.0)
+        self.declare_parameter('std_mag_yaw', 5.0) # deg
 
         self.declare_parameter('init_cov_p', 5.0)
         self.declare_parameter('init_cov_v', 0.5)
@@ -105,6 +107,10 @@ class InsEkfNode(Node):
         
         press_params = float(self.get_parameter('press_params').value)
         self.kf.setPressParams(press_params)
+        
+        std_mag = float(self.get_parameter('std_mag').value)
+        std_mag_yaw = float(self.get_parameter('std_mag_yaw').value)
+        self.kf.setMagParams(std_mag=std_mag, std_yaw=std_mag_yaw)
         
         self.initialized = False
         self.last_imu_time = None
