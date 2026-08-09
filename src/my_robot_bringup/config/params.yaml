@@ -32,7 +32,7 @@ ins_ekf_node:
     use_joint_states: true
     enable_gnss_pos: false
     enable_gnss_vel: false
-    enable_mag: false
+    enable_mag: true
     enable_baro: true
     enable_agv: true
     block_agv_h: false
