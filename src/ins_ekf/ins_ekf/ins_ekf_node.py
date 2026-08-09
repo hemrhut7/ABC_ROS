@@ -42,7 +42,7 @@ class InsEkfNode(Node):
         
         self.declare_parameter('enable_gnss_pos', False)
         self.declare_parameter('enable_gnss_vel', False)
-        self.declare_parameter('enable_mag', False)
+        self.declare_parameter('enable_mag', True)
         self.declare_parameter('enable_baro', True)
         self.declare_parameter('enable_agv', True)
         self.declare_parameter('block_agv_h', False)
@@ -158,7 +158,12 @@ class InsEkfNode(Node):
 
     def mag_callback(self, msg):
         # Convert ROS standard FLU (x forward, y left, z up) to EKF standard RFU (x right, y forward, z up)
-        self.latest_mag = np.array([-msg.magnetic_field.y, msg.magnetic_field.x, msg.magnetic_field.z])
+        # and convert Tesla (T) to milliGauss (mGauss/mG, 1 T = 10^7 mGauss)
+        self.latest_mag = np.array([
+            -msg.magnetic_field.y * 1e7,
+            msg.magnetic_field.x * 1e7,
+            msg.magnetic_field.z * 1e7
+        ])
         self.new_mag = True
 
     def baro_callback(self, msg):

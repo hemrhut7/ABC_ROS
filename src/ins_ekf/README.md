@@ -40,7 +40,7 @@ ros2 launch ins_ekf ins_ekf.launch.py
 ## 5. Subscribed Topics
 - `/imu/data_raw` (`sensor_msgs/msg/Imu`): High-frequency IMU inputs.
 - `/gnss/fix` (`sensor_msgs/msg/NavSatFix`): GNSS position fix.
-- `/mag/data` (`sensor_msgs/msg/MagneticField`): Magnetometer field data (if enabled).
+- `/imu/mag` (`sensor_msgs/msg/MagneticField`): Magnetometer field data in Tesla (converted to milliGauss internally for EKF, enabled by default).
 - `/pressure` (`sensor_msgs/msg/FluidPressure`): Barometer pressure (if enabled).
 - `/velocity` (`geometry_msgs/msg/TwistStamped`): Body-frame AGV speed (if enabled).
 

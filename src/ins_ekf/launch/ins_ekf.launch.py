@@ -16,7 +16,7 @@ def generate_launch_description():
                 'baro_topic': '/baro/pressure',
                 'enable_gnss_pos': False,
                 'enable_gnss_vel': False,
-                'enable_mag': False,
+                'enable_mag': True,
                 'enable_baro': True,
                 'enable_agv': True,
                 'block_agv_h': False,
