@@ -25,6 +25,8 @@ def generate_launch_description():
                 'enable_nhc': False,
                 'enable_zupt_hor': False,
                 'press_params': 10.0,
+                'std_mag': 50.0,
+                'std_mag_yaw': 5.0,
                 'init_cov_p': 5.0,
                 'init_cov_v': 0.5,
                 'init_cov_att': 3.0,

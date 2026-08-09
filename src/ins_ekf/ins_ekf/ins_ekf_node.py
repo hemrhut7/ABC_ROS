@@ -80,7 +80,7 @@ class InsEkfNode(Node):
         self.declare_parameter('enable_nhc', False)
         self.declare_parameter('enable_zupt_hor', False)
         self.declare_parameter('press_params', 10.0)
-        self.declare_parameter('std_mag', 10.0)
+        self.declare_parameter('std_mag', 50.0)
         self.declare_parameter('std_mag_yaw', 5.0) # deg
 
         self.declare_parameter('init_cov_p', 5.0)
