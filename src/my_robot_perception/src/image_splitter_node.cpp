@@ -29,7 +29,7 @@ public:
     this->declare_parameter<int>("fps", 60);
     this->declare_parameter<std::string>("fourcc", "MJPG");
     this->declare_parameter<std::string>("frame_id", "camera_link");
-    this->declare_parameter<int>("rotation_angle", 0);
+    this->declare_parameter<int>("rotation_angle", 180);
     this->declare_parameter<int>("jpeg_quality", 60);
 
     // Get parameters

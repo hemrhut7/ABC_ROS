@@ -1,0 +1,87 @@
+%YAML:1.0
+
+# ==============================================================================
+# VINS-Fusion Stereo + IMU Configuration
+# 適用於 ABC_ROS 機器人平台
+# 雙目相機: Waveshare AR0144 (640x480)
+# IMU: ESP32 (MPU6050/ICM-20948)
+# ==============================================================================
+
+# ======================== Common Parameters ========================
+# support: 1 imu 1 cam; 1 imu 2 cam; 2 cam
+imu: 1
+num_of_cam: 2
+
+imu_topic: "/imu/data_raw"
+image0_topic: "/camera/left/image_raw"
+image1_topic: "/camera/right/image_raw"
+output_path: "/workspace/output/"
+
+cam0_calib: "cam0_pinhole.yaml"
+cam1_calib: "cam1_pinhole.yaml"
+image_width: 640
+image_height: 480
+
+# ======================== Extrinsic Parameters ========================
+# Extrinsic parameter between IMU and Camera.
+# 0: Have accurate extrinsic parameters (trust body_T_cam values exactly)
+# 1: Have an initial guess, system will optimize online
+estimate_extrinsic: 1
+
+# Transformation from IMU body frame to Camera frame
+# 由 robot.urdf 幾何推導 (相機已在 image_splitter_node 中完成 180° 翻轉)
+# IMU  位置: xyz="0.012 -0.015 0.0805" (相對 base_link)
+# CAM0 位置: xyz="0.0575 0 0.177"      (相對 base_link, rpy="0 0 0")
+# body_T_cam0 = inv(T_base_imu) * T_base_cam0
+body_T_cam0: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [1.0, 0.0, 0.0, 0.0455,
+          0.0, 1.0, 0.0, 0.015,
+          0.0, 0.0, 1.0, 0.0965,
+          0.0, 0.0, 0.0, 1.0]
+
+# CAM1 位置: cam0 + stereo baseline T=[-52.936mm, -0.265mm, -0.868mm]
+# body_T_cam1 = inv(T_base_imu) * T_base_cam1
+body_T_cam1: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [1.0, 0.0, 0.0, -0.007436,
+          0.0, 1.0, 0.0, 0.014735,
+          0.0, 0.0, 1.0, 0.095632,
+          0.0, 0.0, 0.0, 1.0]
+
+# Multiple thread support
+multiple_thread: 1
+
+# ======================== Feature Tracker Parameters ========================
+max_cnt: 150            # max feature number in feature tracking
+min_dist: 30            # min distance between two features
+freq: 10                # frequency (Hz) of publish tracking result. Set 0 for raw frequency.
+F_threshold: 1.0        # ransac threshold (pixel)
+show_track: 1           # publish tracking image as topic
+flow_back: 1            # perform forward-backward optical flow for better robustness
+equalize: 1             # enable adaptive histogram equalization
+
+# ======================== Optimization Parameters ========================
+max_solver_time: 0.04   # max solver iteration time (second), increase on powerful hardware
+max_num_iterations: 8   # max solver iterations
+keyframe_parallax: 10.0 # keyframe selection threshold (pixel)
+
+# ======================== IMU Parameters ========================
+# TODO: 以下為通用預設值，請使用 imu_utils / Allan Variance 校正後替換
+acc_n: 0.1              # accelerometer measurement noise standard deviation (m/s^2)
+gyr_n: 0.01             # gyroscope measurement noise standard deviation (rad/s)
+acc_w: 0.001            # accelerometer bias random walk noise (m/s^3)
+gyr_w: 0.0001           # gyroscope bias random walk noise (rad/s^2)
+g_norm: 9.81007         # gravity magnitude
+
+# ======================== Loop Closure ========================
+loop_closure: 0          # 1 to enable loop closure (建議在 Jetson 上先關閉以節省運算)
+
+# ======================== Visualization ========================
+save_image: 0            # save image in pose graph for visualization purpose
+visualize_imu_forward: 0
+visualize_camera_size: 0.4

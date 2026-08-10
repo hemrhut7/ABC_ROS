@@ -1,0 +1,103 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+  - Class: rviz_common/Views
+    Name: Views
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+      Update Interval: 0
+    - Class: rviz_default_plugins/Grid
+      Enabled: true
+      Name: Grid
+      Line Style:
+        Line Width: 0.03
+        Value: Lines
+      Normal Cell Count: 0
+      Cell Size: 1
+      Color: 160; 160; 164
+      Plane: XY
+      Plane Cell Count: 10
+    - Class: rviz_default_plugins/Odometry
+      Enabled: true
+      Name: VINS Odometry
+      Topic:
+        Value: /vins_fusion/odometry
+        Depth: 5
+        Reliability Policy: Reliable
+      Position Tolerance: 0.1
+      Angle Tolerance: 0.1
+      Keep: 1
+      Shape:
+        Value: Arrow
+        Alpha: 1
+        Shaft Length: 0.1
+        Shaft Radius: 0.02
+        Head Length: 0.03
+        Head Radius: 0.04
+        Color: 0; 255; 0
+    - Class: rviz_default_plugins/Path
+      Enabled: true
+      Name: VINS Path
+      Topic:
+        Value: /vins_fusion/path
+        Depth: 5
+        Reliability Policy: Reliable
+      Color: 25; 255; 0
+      Alpha: 1
+      Line Style: Lines
+      Line Width: 0.03
+    - Class: rviz_default_plugins/Image
+      Enabled: false
+      Name: Tracking Image
+      Topic:
+        Value: /vins_fusion/image_track
+        Depth: 5
+        Reliability Policy: Reliable
+    - Class: rviz_default_plugins/PointCloud2
+      Enabled: true
+      Name: Point Cloud
+      Topic:
+        Value: /vins_fusion/point_cloud
+        Depth: 5
+        Reliability Policy: Reliable
+      Size (Pixels): 3
+      Style: Points
+      Color Transformer: FlatColor
+      Color: 255; 255; 255
+      Alpha: 1
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: world
+    Frame Rate: 30
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/ThirdPersonFollower
+      Distance: 10
+      Enable Stereo Rendering:
+        Value: false
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 0
+      Focal Shape Fixed Size: true
+      Focal Shape Size: 0.05
+      Invert Z Axis: false
+      Name: Current View
+      Near Clip Distance: 0.01
+      Pitch: 0.5
+      Target Frame: base_link
+      Value: ThirdPersonFollower (rviz_default_plugins)
+      Yaw: 0
+Window Geometry:
+  Height: 800
+  Width: 1200
+  X: 0
+  Y: 0

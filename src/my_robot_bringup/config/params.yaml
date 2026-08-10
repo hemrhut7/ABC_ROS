@@ -57,7 +57,7 @@ n10_lidar_node:
     baud_rate: 230400
     frame_id: "laser_link"
     topic_name: "/scan"
-    range_min: 0.1
+    range_min: 0.15
     range_max: 12.0
 
 
