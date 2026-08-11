@@ -60,11 +60,9 @@ public:
       frame_id_.c_str(), rotation_angle_, jpeg_quality_);
 
     // Initialize publishers
-    stereo_pub_ = this->create_publisher<sensor_msgs::msg::Image>("camera/stereo/image_raw", 10);
     left_pub_ = this->create_publisher<sensor_msgs::msg::Image>("camera/left/image_raw", 10);
     right_pub_ = this->create_publisher<sensor_msgs::msg::Image>("camera/right/image_raw", 10);
 
-    stereo_compressed_pub_ = this->create_publisher<sensor_msgs::msg::CompressedImage>("camera/stereo/image_raw/compressed", 10);
     left_compressed_pub_ = this->create_publisher<sensor_msgs::msg::CompressedImage>("camera/left/image_raw/compressed", 10);
     right_compressed_pub_ = this->create_publisher<sensor_msgs::msg::CompressedImage>("camera/right/image_raw/compressed", 10);
 
@@ -172,18 +170,15 @@ private:
   {
     auto start_time = std::chrono::steady_clock::now();
 
-    size_t stereo_raw_subs = stereo_pub_->get_subscription_count();
-    size_t stereo_comp_subs = stereo_compressed_pub_->get_subscription_count();
     size_t left_raw_subs = left_pub_->get_subscription_count();
     size_t left_comp_subs = left_compressed_pub_->get_subscription_count();
     size_t right_raw_subs = right_pub_->get_subscription_count();
     size_t right_comp_subs = right_compressed_pub_->get_subscription_count();
 
-    bool any_stereo = (stereo_raw_subs > 0) || (stereo_comp_subs > 0);
     bool any_left = (left_raw_subs > 0) || (left_comp_subs > 0);
     bool any_right = (right_raw_subs > 0) || (right_comp_subs > 0);
 
-    if (!any_stereo && !any_left && !any_right) {
+    if (!any_left && !any_right) {
       return;
     }
 
@@ -197,34 +192,6 @@ private:
 
     rclcpp::Time timestamp = this->get_clock()->now();
 
-    // Stereo frame
-    if (any_stereo) {
-      try {
-        std_msgs::msg::Header stereo_header;
-        stereo_header.stamp = timestamp;
-        stereo_header.frame_id = frame_id_;
-
-        if (stereo_raw_subs > 0) {
-          sensor_msgs::msg::Image::SharedPtr stereo_msg =
-            cv_bridge::CvImage(stereo_header, "bgr8", frame).toImageMsg();
-          stereo_pub_->publish(*stereo_msg);
-        }
-
-        if (stereo_comp_subs > 0) {
-          std::vector<uchar> buf;
-          std::vector<int> params = {cv::IMWRITE_JPEG_QUALITY, jpeg_quality_};
-          if (cv::imencode(".jpg", frame, buf, params)) {
-            sensor_msgs::msg::CompressedImage comp_msg;
-            comp_msg.header = stereo_header;
-            comp_msg.format = "jpeg";
-            comp_msg.data = buf;
-            stereo_compressed_pub_->publish(comp_msg);
-          }
-        }
-      } catch (const std::exception & e) {
-        RCLCPP_ERROR(this->get_logger(), "Error publishing stereo image: %s", e.what());
-      }
-    }
 
     // Split left and right images
     if (any_left || any_right) {
@@ -305,9 +272,8 @@ private:
       double duration_ms = std::chrono::duration<double, std::milli>(end_time - start_time).count();
       RCLCPP_INFO(this->get_logger(),
         "Processing loop execution time: %.2f ms "
-        "(Subscribers - Stereo Raw/Comp: %zu/%zu, Left: %zu/%zu, Right: %zu/%zu)",
-        duration_ms, stereo_raw_subs, stereo_comp_subs,
-        left_raw_subs, left_comp_subs, right_raw_subs, right_comp_subs);
+        "(Subscribers - Left: %zu/%zu, Right: %zu/%zu)",
+        duration_ms, left_raw_subs, left_comp_subs, right_raw_subs, right_comp_subs);
     }
   }
 
@@ -356,11 +322,9 @@ private:
   double actual_fps_{0.0};
 
   // ROS 2 Publishers
-  rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr stereo_pub_;
   rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr left_pub_;
   rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr right_pub_;
 
-  rclcpp::Publisher<sensor_msgs::msg::CompressedImage>::SharedPtr stereo_compressed_pub_;
   rclcpp::Publisher<sensor_msgs::msg::CompressedImage>::SharedPtr left_compressed_pub_;
   rclcpp::Publisher<sensor_msgs::msg::CompressedImage>::SharedPtr right_compressed_pub_;
 
