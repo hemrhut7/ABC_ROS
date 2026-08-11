@@ -1,0 +1,4 @@
+File Name,Measure Time (hr),Data Rate (Hz),Mean (ug),STD (ug),Bias Instability (ug),VRW (ug/¡ÔHz),RRW (ug¡ÔHz),Bias Stability (ug),Max Offset (ug)
+ABC_Controller_20260811_125542_ax,0.9,200.0,-1183.746,1602.050,112.664,143.722,15.560,425.642,1385.484
+ABC_Controller_20260811_125542_ay,0.9,200.0,964143.713,1629.721,103.094,146.372,13.437,169.210,365.789
+ABC_Controller_20260811_125542_az,0.9,200.0,252030.543,1967.027,260.217,138.646,37.951,963.507,2942.730
