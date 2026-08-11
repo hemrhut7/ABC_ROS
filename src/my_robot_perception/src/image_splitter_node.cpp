@@ -19,8 +19,7 @@ class ImageSplitterNode : public rclcpp::Node
 public:
   ImageSplitterNode()
   : Node("image_splitter_node"),
-    running_(false),
-    frame_count_(0)
+    running_(false)
   {
     // Declare parameters
     this->declare_parameter<int>("video_device", 0);
@@ -31,6 +30,7 @@ public:
     this->declare_parameter<std::string>("frame_id", "camera_link");
     this->declare_parameter<int>("rotation_angle", 180);
     this->declare_parameter<int>("jpeg_quality", 60);
+    this->declare_parameter<int>("publish_fps", 0);  // 0 = same as capture fps (no throttle)
 
     // Get parameters
     video_device_ = this->get_parameter("video_device").as_int();
@@ -41,6 +41,13 @@ public:
     frame_id_ = this->get_parameter("frame_id").as_string();
     rotation_angle_ = this->get_parameter("rotation_angle").as_int();
     jpeg_quality_ = this->get_parameter("jpeg_quality").as_int();
+    publish_fps_ = this->get_parameter("publish_fps").as_int();
+
+    if (publish_fps_ > 0) {
+      publish_interval_ms_ = 1000.0 / publish_fps_;
+      RCLCPP_INFO(this->get_logger(), "Publish rate throttled to %d FPS (interval: %.1f ms)",
+        publish_fps_, publish_interval_ms_);
+    }
 
     // Capitalize fourcc
     for (auto & c : fourcc_) {
@@ -60,14 +67,20 @@ public:
       frame_id_.c_str(), rotation_angle_, jpeg_quality_);
 
     // Initialize publishers
-    left_pub_ = this->create_publisher<sensor_msgs::msg::Image>("camera/left/image_raw", 10);
-    right_pub_ = this->create_publisher<sensor_msgs::msg::Image>("camera/right/image_raw", 10);
+    // RELIABLE: compatible with both RELIABLE and BEST_EFFORT subscribers (RVIZ2 uses RELIABLE)
+    // VOLATILE + KeepLast(5): avoid buffering stale frames over network
+    auto sensor_qos = rclcpp::QoS(rclcpp::KeepLast(5))
+      .reliable()
+      .durability_volatile();
 
-    left_compressed_pub_ = this->create_publisher<sensor_msgs::msg::CompressedImage>("camera/left/image_raw/compressed", 10);
-    right_compressed_pub_ = this->create_publisher<sensor_msgs::msg::CompressedImage>("camera/right/image_raw/compressed", 10);
+    left_pub_ = this->create_publisher<sensor_msgs::msg::Image>("camera/left/image_raw", sensor_qos);
+    right_pub_ = this->create_publisher<sensor_msgs::msg::Image>("camera/right/image_raw", sensor_qos);
 
-    left_info_pub_ = this->create_publisher<sensor_msgs::msg::CameraInfo>("camera/left/camera_info", 10);
-    right_info_pub_ = this->create_publisher<sensor_msgs::msg::CameraInfo>("camera/right/camera_info", 10);
+    left_compressed_pub_ = this->create_publisher<sensor_msgs::msg::CompressedImage>("camera/left/image_raw/compressed", sensor_qos);
+    right_compressed_pub_ = this->create_publisher<sensor_msgs::msg::CompressedImage>("camera/right/image_raw/compressed", sensor_qos);
+
+    left_info_pub_ = this->create_publisher<sensor_msgs::msg::CameraInfo>("camera/left/camera_info", sensor_qos);
+    right_info_pub_ = this->create_publisher<sensor_msgs::msg::CameraInfo>("camera/right/camera_info", sensor_qos);
 
     // Initialize camera capture
     cap_.open(video_device_, cv::CAP_V4L2);
@@ -170,6 +183,16 @@ private:
   {
     auto start_time = std::chrono::steady_clock::now();
 
+    // Throttle publish rate if publish_fps is set
+    if (publish_fps_ > 0) {
+      double elapsed_ms = std::chrono::duration<double, std::milli>(
+        start_time - last_publish_time_).count();
+      if (elapsed_ms < publish_interval_ms_) {
+        return;
+      }
+      last_publish_time_ = start_time;
+    }
+
     size_t left_raw_subs = left_pub_->get_subscription_count();
     size_t left_comp_subs = left_compressed_pub_->get_subscription_count();
     size_t right_raw_subs = right_pub_->get_subscription_count();
@@ -265,15 +288,16 @@ private:
       }
     }
 
-    // Diagnostic logging every 150 frames
-    frame_count_++;
-    if (frame_count_ % 150 == 0) {
-      auto end_time = std::chrono::steady_clock::now();
-      double duration_ms = std::chrono::duration<double, std::milli>(end_time - start_time).count();
+    // Log only when subscriber state changes
+    if (left_raw_subs != prev_left_raw_subs_ || left_comp_subs != prev_left_comp_subs_ ||
+        right_raw_subs != prev_right_raw_subs_ || right_comp_subs != prev_right_comp_subs_) {
       RCLCPP_INFO(this->get_logger(),
-        "Processing loop execution time: %.2f ms "
-        "(Subscribers - Left: %zu/%zu, Right: %zu/%zu)",
-        duration_ms, left_raw_subs, left_comp_subs, right_raw_subs, right_comp_subs);
+        "Subscribers updated - Left raw: %zu, Left comp: %zu | Right raw: %zu, Right comp: %zu",
+        left_raw_subs, left_comp_subs, right_raw_subs, right_comp_subs);
+      prev_left_raw_subs_ = left_raw_subs;
+      prev_left_comp_subs_ = left_comp_subs;
+      prev_right_raw_subs_ = right_raw_subs;
+      prev_right_comp_subs_ = right_comp_subs;
     }
   }
 
@@ -316,10 +340,19 @@ private:
   std::string frame_id_;
   int rotation_angle_;
   int jpeg_quality_;
+  int publish_fps_;
+  double publish_interval_ms_{0.0};
 
   int actual_w_{0};
   int actual_h_{0};
   double actual_fps_{0.0};
+  std::chrono::steady_clock::time_point last_publish_time_{};
+
+  // Subscriber state tracking (for change-based logging)
+  size_t prev_left_raw_subs_{0};
+  size_t prev_left_comp_subs_{0};
+  size_t prev_right_raw_subs_{0};
+  size_t prev_right_comp_subs_{0};
 
   // ROS 2 Publishers
   rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr left_pub_;
@@ -335,7 +368,6 @@ private:
   cv::VideoCapture cap_;
   std::atomic<bool> running_;
   std::thread capture_thread_;
-  uint64_t frame_count_;
 };
 
 int main(int argc, char ** argv)
