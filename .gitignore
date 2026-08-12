@@ -22,6 +22,7 @@ venv/
 
 # Log Recordings
 /ros2_bag
+/output
 
 # Agent settings & scratchpad
 .agents/

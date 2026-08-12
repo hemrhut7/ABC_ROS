@@ -8,18 +8,17 @@
 
 ### 🔴 必要 (Must Do)
 
-- [ ] **IMU 噪聲參數校正**
+- [ X ] **IMU 噪聲參數校正**
   - 目前 [`vins_fusion_stereo_imu_config.yaml`](../config/vins_fusion_stereo_imu_config.yaml) 中的 `acc_n`, `gyr_n`, `acc_w`, `gyr_w` 為**通用預設值**
   - 建議使用 [imu_utils](https://github.com/gaowenliang/imu_utils) 或 Allan Variance 分析工具，錄製靜止狀態下的 IMU 數據進行校正
   - 校正完成後，替換 config 中對應的四個參數
 
-- [ ] **Camera-IMU 外參精確校正**
+- [ X ] **Camera-IMU 外參精確校正**
   - 目前 `body_T_cam0` / `body_T_cam1` 是從 URDF 機械尺寸推導的**初始估計值**
   - `estimate_extrinsic: 1` 已啟用線上優化，但精確的初始值能大幅改善收斂速度
   - 建議使用 [Kalibr](https://github.com/ethz-asl/kalibr) 進行 Camera-IMU 聯合校正
   - 校正完成後：
     1. 更新 `body_T_cam0` / `body_T_cam1` 的值
-    2. 將 `estimate_extrinsic` 改為 `0`
 
 - [ ] **確認 VINS-Fusion ROS 2 套件的 executable 名稱**
   - Launch 檔案中假設為 `vins_fusion_node`
@@ -30,16 +29,6 @@
   - 若 executable 名稱不同，請修改 [`vins_fusion.launch.py`](../launch/vins_fusion.launch.py) 中的 `executable` 欄位
 
 ### 🟡 建議 (Should Do)
-
-- [ ] **時間同步確認**
-  - VINS-Fusion 對 IMU 與影像的時間戳同步非常敏感
-  - 確保 ESP32 的 IMU 資料時間戳與 Jetson 的系統時鐘對齊
-  - 若使用 micro-ROS，時間戳預設為 Agent 端（Jetson）的時鐘，通常已足夠
-
-- [ ] **相機解析度一致性檢查**
-  - `image_splitter_node` 的 `width=1280, height=480` 切割為 `640×480`
-  - VINS config 中 `image_width: 640, image_height: 480` 必須與之一致
-  - 若未來調整相機解析度，config 需同步修改
 
 - [ ] **測試 Loop Closure 功能**
   - 目前 `loop_closure: 0`（關閉），以降低 Jetson 運算負載

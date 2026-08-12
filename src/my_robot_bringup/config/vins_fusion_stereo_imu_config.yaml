@@ -22,6 +22,11 @@ cam1_calib: "cam1_pinhole.yaml"
 image_width: 640
 image_height: 480
 
+# GPU acceleration
+use_gpu: 0
+use_gpu_acc_flow: 0
+use_gpu_ceres: 0
+
 # ======================== Extrinsic Parameters ========================
 # Extrinsic parameter between IMU and Camera.
 # 0: Have accurate extrinsic parameters (trust body_T_cam values exactly)
@@ -29,29 +34,25 @@ image_height: 480
 estimate_extrinsic: 1
 
 # Transformation from IMU body frame to Camera frame
-# 由 robot.urdf 幾何推導 (相機已在 image_splitter_node 中完成 180° 翻轉)
-# IMU  位置: xyz="0.012 -0.015 0.0805" (相對 base_link)
-# CAM0 位置: xyz="0.0575 0 0.177"      (相對 base_link, rpy="0 0 0")
-# body_T_cam0 = inv(T_base_imu) * T_base_cam0
+# 來源: Kalibr calibration (rosbag_total_20260811_163132)
+# body_T_cam = inv(T_cam_imu)  — T_cam_imu from camchain-imucam.yaml
 body_T_cam0: !!opencv-matrix
    rows: 4
    cols: 4
    dt: d
-   data: [1.0, 0.0, 0.0, 0.0455,
-          0.0, 1.0, 0.0, 0.015,
-          0.0, 0.0, 1.0, 0.0965,
-          0.0, 0.0, 0.0, 1.0]
+   data: [ 0.021103513585374212,  0.007418891625507792,  0.9997497695730665,   0.044798169991720975,
+          -0.999777293526675,     8.543211451197283e-05, 0.02110346061264885,  0.04287807789706624,
+           7.115355041089461e-05, -0.9999724759954153,   0.007419042308107123, 0.0924990175300848,
+           0.0, 0.0, 0.0, 1.0]
 
-# CAM1 位置: cam0 + stereo baseline T=[-52.936mm, -0.265mm, -0.868mm]
-# body_T_cam1 = inv(T_base_imu) * T_base_cam1
 body_T_cam1: !!opencv-matrix
    rows: 4
    cols: 4
    dt: d
-   data: [1.0, 0.0, 0.0, -0.007436,
-          0.0, 1.0, 0.0, 0.014735,
-          0.0, 0.0, 1.0, 0.095632,
-          0.0, 0.0, 0.0, 1.0]
+   data: [ 0.00787773737128727,  -0.0004982021163341821, 0.9999688460389955,   0.046132562087697795,
+          -0.999968948908393,     0.0002021712138430194, 0.007877838906955205, -0.009025056039920822,
+          -0.00020608967142444494, -0.9999998554607152,  -0.0004965939948879807, 0.09232025180364296,
+           0.0, 0.0, 0.0, 1.0]
 
 # Multiple thread support
 multiple_thread: 1
@@ -71,12 +72,20 @@ max_num_iterations: 8   # max solver iterations
 keyframe_parallax: 10.0 # keyframe selection threshold (pixel)
 
 # ======================== IMU Parameters ========================
-# TODO: 以下為通用預設值，請使用 imu_utils / Allan Variance 校正後替換
-acc_n: 0.1              # accelerometer measurement noise standard deviation (m/s^2)
-gyr_n: 0.01             # gyroscope measurement noise standard deviation (rad/s)
-acc_w: 0.001            # accelerometer bias random walk noise (m/s^3)
-gyr_w: 0.0001           # gyroscope bias random walk noise (rad/s^2)
-g_norm: 9.81007         # gravity magnitude
+# 來源: Kalibr IMU calibration (rosbag_total_20260811_163132)
+# 注意: VINS-Fusion 的離散噪聲模型需要放大 Kalibr 連續時間噪聲密度值
+#       參考 EuRoC config (acc_n=0.1 vs ADIS16448 density=0.008 → ~12x)
+acc_n: 0.014              # Kalibr 0.001401501 × 10 (m/s^2)
+gyr_n: 0.0013             # Kalibr 0.0001297458 × 10 (rad/s)
+acc_w: 0.0022             # Kalibr 0.0002188452 × 10 (m/s^3)
+gyr_w: 0.00011            # Kalibr 1.098935e-05 × 10 (rad/s^2)
+g_norm: 9.81007           # gravity magnitude
+
+# ======================== Time Offset ========================
+# 來源: Kalibr camchain-imucam (timeshift_cam_imu: -0.02904955804098852)
+# td 定義: image_clock + td = imu_clock
+estimate_td: 1                      # online estimate time offset between camera and imu
+td: -0.029                          # initial value of time offset (s), from Kalibr calibration
 
 # ======================== Loop Closure ========================
 loop_closure: 0          # 1 to enable loop closure (建議在 Jetson 上先關閉以節省運算)

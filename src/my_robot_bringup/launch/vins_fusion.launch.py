@@ -67,14 +67,4 @@ def generate_launch_description():
                 'config_file': config_file,
             }]
         ),
-
-        # 2. RViz2 (Optional — uncomment for visualization, not recommended on headless Jetson)
-        # Node(
-        #     package='rviz2',
-        #     executable='rviz2',
-        #     name='rviz2',
-        #     output='screen',
-        #     arguments=['-d', os.path.join(pkg_share, 'rviz', 'vins_fusion.rviz')],
-        #     parameters=[{'use_sim_time': use_sim_time}]
-        # ),
     ])
