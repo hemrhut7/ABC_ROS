@@ -84,14 +84,6 @@ def generate_launch_description():
             name='n10_lidar_node',
             output='screen',
             parameters=[params_file]
-        ),
-        
-        # 5. INS EKF Fusion Node
-        Node(
-            package='ins_ekf',
-            executable='ins_ekf_node',
-            name='ins_ekf_node',
-            output='screen',
-            parameters=[params_file]
         )
     ])
+
