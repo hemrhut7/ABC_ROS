@@ -1,5 +1,41 @@
 import os
 import sys
+
+# Dynamically search upwards for INS_python/.venv site-packages.
+# If .venv exists, load site-packages from .venv; otherwise fall back to system Python environment.
+def _setup_environment():
+    curr_dir = os.path.abspath(os.path.dirname(__file__))
+    py_ver = f"python{sys.version_info.major}.{sys.version_info.minor}"
+    while True:
+        cand1 = os.path.join(curr_dir, 'src', 'INS_python', '.venv', 'lib', py_ver, 'site-packages')
+        cand2 = os.path.join(curr_dir, 'INS_python', '.venv', 'lib', py_ver, 'site-packages')
+        submod1 = os.path.join(curr_dir, 'src', 'INS_python')
+        submod2 = os.path.join(curr_dir, 'INS_python')
+        
+        found = False
+        if os.path.exists(cand1):
+            if cand1 not in sys.path:
+                sys.path.insert(0, cand1)
+            if submod1 not in sys.path:
+                sys.path.insert(0, submod1)
+            found = True
+        elif os.path.exists(cand2):
+            if cand2 not in sys.path:
+                sys.path.insert(0, cand2)
+            if submod2 not in sys.path:
+                sys.path.insert(0, submod2)
+            found = True
+
+        if found:
+            break
+            
+        parent = os.path.dirname(curr_dir)
+        if parent == curr_dir:
+            break
+        curr_dir = parent
+
+_setup_environment()
+
 import numpy as np
 from scipy.spatial.transform import Rotation
 import rclpy
@@ -9,13 +45,6 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import TwistStamped, PoseStamped, Quaternion, TransformStamped
 from tf2_ros import TransformBroadcaster
 from rclpy.qos import qos_profile_sensor_data
-
-# Add project root or submodule to path to import nav_ekf
-parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-submodule_dir = os.path.abspath(os.path.join(parent_dir, '..', 'INS_python'))
-if os.path.exists(submodule_dir):
-    sys.path.insert(0, submodule_dir)
-sys.path.insert(0, parent_dir)
 
 from nav_ekf.filters.ins_gnss_kf import INS_GNSS
 from nav_ekf.sensors.params import ICM20948_params
@@ -52,6 +81,8 @@ class InsEkfNode(Node):
         self.declare_parameter('enable_nhc', False)
         self.declare_parameter('enable_zupt_hor', False)
         self.declare_parameter('press_params', 10.0)
+        self.declare_parameter('std_mag', 50.0)
+        self.declare_parameter('std_mag_yaw', 5.0) # deg
 
         self.declare_parameter('init_cov_p', 5.0)
         self.declare_parameter('init_cov_v', 0.5)
@@ -78,6 +109,10 @@ class InsEkfNode(Node):
         
         press_params = float(self.get_parameter('press_params').value)
         self.kf.setPressParams(press_params)
+        
+        std_mag = float(self.get_parameter('std_mag').value)
+        std_mag_yaw = float(self.get_parameter('std_mag_yaw').value)
+        self.kf.setMagParams(std_mag=std_mag, std_yaw=std_mag_yaw)
         
         self.initialized = False
         self.last_imu_time = None
@@ -359,9 +394,13 @@ def main(args=None):
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
+    except Exception as e:
+        if rclpy.ok():
+            node.get_logger().error(f"Unexpected exception: {e}")
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 if __name__ == '__main__':
     main()

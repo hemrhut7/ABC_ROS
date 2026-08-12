@@ -78,7 +78,9 @@ private:
     if (is_connected_) {
       auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
         std::chrono::steady_clock::now() - last_msg_time_).count();
-      if (elapsed >= 3) {
+      if (elapsed >= 0.05) {
+        RCLCPP_WARN(this->get_logger(), "ESP32 serial telemetry connection: LOST (no data for > 0.05s): %d", ++error_counter);
+      } else if (elapsed >= 3) {
         is_connected_ = false;
         RCLCPP_WARN(this->get_logger(), "ESP32 serial telemetry connection: LOST (no data for >3s)");
       }
@@ -159,6 +161,7 @@ private:
 
   // Watchdog timer
   rclcpp::TimerBase::SharedPtr watchdog_timer_;
+  uint16_t error_counter = 0;
 };
 
 int main(int argc, char ** argv) {

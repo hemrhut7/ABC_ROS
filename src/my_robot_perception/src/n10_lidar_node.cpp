@@ -192,11 +192,7 @@ public:
         uint16_t dist_raw = stream_buf_[idx] * 256 + stream_buf_[idx + 1];
         uint8_t intensity = stream_buf_[idx + 2];
 
-        if (dist_raw == 0xFFFF) {
-          continue;
-        }
-
-        float distance = dist_raw / 1000.0f; // meters
+        float distance = (dist_raw == 0xFFFF) ? std::numeric_limits<float>::infinity() : (dist_raw / 1000.0f);
         float angle = start_angle + (angle_diff / (points_in_packet - 1)) * i;
         if (angle >= 360.0f) {
           angle -= 360.0f;
@@ -244,7 +240,7 @@ public:
     // Declare parameters
     this->declare_parameter<std::string>("port", "");
     this->declare_parameter<int>("baud_rate", 230400);
-    this->declare_parameter<std::string>("frame_id", "laser_frame");
+    this->declare_parameter<std::string>("frame_id", "laser_link");
     this->declare_parameter<std::string>("topic_name", "/scan");
     this->declare_parameter<double>("range_min", 0.05);
     this->declare_parameter<double>("range_max", 12.0);
@@ -356,55 +352,46 @@ private:
     last_scan_time_ = current_time;
     scan_count_++;
 
-    // Convert degrees to radians and sort points by angle
-    struct SortedPoint {
-      float angle_rad;
-      float distance;
-      float intensity;
-    };
-
-    std::vector<SortedPoint> sorted_points;
-    sorted_points.reserve(data.points.size());
-
-    for (const auto & pt : data.points) {
-      float angle_rad = pt.angle * static_cast<float>(M_PI) / 180.0f;
-      sorted_points.push_back({angle_rad, pt.distance, pt.intensity});
-    }
-
-    std::sort(sorted_points.begin(), sorted_points.end(), [](const SortedPoint & a, const SortedPoint & b) {
-      return a.angle_rad < b.angle_rad;
-    });
+    constexpr size_t num_bins = 450; // Fixed 450 angular bins for full 360-degree scan (~0.8 deg/bin)
+    constexpr float angle_min = -static_cast<float>(M_PI);
+    constexpr float angle_max = static_cast<float>(M_PI);
+    constexpr float angle_increment = (angle_max - angle_min) / num_bins;
 
     sensor_msgs::msg::LaserScan scan_msg;
     scan_msg.header.stamp = this->get_clock()->now();
     scan_msg.header.frame_id = frame_id_;
 
-    scan_msg.angle_min = sorted_points.front().angle_rad;
-    scan_msg.angle_max = sorted_points.back().angle_rad;
-
-    size_t count = sorted_points.size();
-    if (count > 1) {
-      scan_msg.angle_increment = (sorted_points.back().angle_rad - sorted_points.front().angle_rad) / (count - 1);
-      scan_msg.time_increment = static_cast<float>(scan_time / count);
-    } else {
-      scan_msg.angle_increment = 0.0f;
-      scan_msg.time_increment = 0.0f;
-    }
-
+    scan_msg.angle_min = angle_min;
+    scan_msg.angle_max = angle_max;
+    scan_msg.angle_increment = angle_increment;
+    scan_msg.time_increment = static_cast<float>(scan_time / num_bins);
     scan_msg.scan_time = static_cast<float>(scan_time);
     scan_msg.range_min = static_cast<float>(range_min_);
     scan_msg.range_max = static_cast<float>(range_max_);
 
-    scan_msg.ranges.reserve(count);
-    scan_msg.intensities.reserve(count);
+    scan_msg.ranges.assign(num_bins, std::numeric_limits<float>::infinity());
+    scan_msg.intensities.assign(num_bins, 0.0f);
 
-    for (const auto & pt : sorted_points) {
-      if (pt.distance >= range_min_ && pt.distance <= range_max_) {
-        scan_msg.ranges.push_back(pt.distance);
-      } else {
-        scan_msg.ranges.push_back(std::numeric_limits<float>::infinity());
+    for (const auto & pt : data.points) {
+      if (std::isinf(pt.distance) || std::isnan(pt.distance) ||
+          pt.distance < range_min_ || pt.distance > range_max_) {
+        continue;
       }
-      scan_msg.intensities.push_back(pt.intensity);
+
+      // N10 LiDAR hardware spins Clockwise (CW).
+      // ROS standard (REP-103) uses right-handed coordinates: positive angles are Counter-Clockwise (CCW).
+      // Convert CW angle in degrees (0..360) to ROS CCW angle in radians [-PI, PI).
+      float ros_angle = -(pt.angle * static_cast<float>(M_PI) / 180.0f);
+      while (ros_angle < -static_cast<float>(M_PI)) ros_angle += 2.0f * static_cast<float>(M_PI);
+      while (ros_angle >= static_cast<float>(M_PI)) ros_angle -= 2.0f * static_cast<float>(M_PI);
+
+      int bin = static_cast<int>(std::floor((ros_angle - angle_min) / angle_increment));
+      if (bin >= 0 && static_cast<size_t>(bin) < num_bins) {
+        if (std::isinf(scan_msg.ranges[bin]) || pt.distance < scan_msg.ranges[bin]) {
+          scan_msg.ranges[bin] = pt.distance;
+          scan_msg.intensities[bin] = pt.intensity;
+        }
+      }
     }
 
     scan_pub_->publish(scan_msg);

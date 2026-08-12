@@ -21,22 +21,24 @@ public:
   DataLoggerNode()
   : Node("data_logger_node"), record_pid_(-1)
   {
-    // Parameters
-    this->declare_parameter<std::string>("auto_log", "true");
+    // Handle auto_log as string or bool using dynamic typing
+    rcl_interfaces::msg::ParameterDescriptor auto_log_desc;
+    auto_log_desc.dynamic_typing = true;
+    this->declare_parameter("auto_log", rclcpp::ParameterValue(true), auto_log_desc);
     this->declare_parameter<std::string>("mode", "total");
     this->declare_parameter<std::string>("record_output_dir", "ros2_bag");
     this->declare_parameter<std::vector<std::string>>("record_topics", std::vector<std::string>{});
 
-    // Handle auto_log as string or bool
-    std::string auto_log_str = "true";
     try {
       auto param = this->get_parameter("auto_log");
       if (param.get_type() == rclcpp::ParameterType::PARAMETER_BOOL) {
         auto_log_enabled_ = param.as_bool();
-      } else {
-        auto_log_str = param.as_string();
+      } else if (param.get_type() == rclcpp::ParameterType::PARAMETER_STRING) {
+        std::string auto_log_str = param.as_string();
         std::transform(auto_log_str.begin(), auto_log_str.end(), auto_log_str.begin(), ::tolower);
         auto_log_enabled_ = (auto_log_str == "true" || auto_log_str == "enable" || auto_log_str == "enabled" || auto_log_str == "1" || auto_log_str == "on");
+      } else {
+        auto_log_enabled_ = true;
       }
     } catch (...) {
       auto_log_enabled_ = true;

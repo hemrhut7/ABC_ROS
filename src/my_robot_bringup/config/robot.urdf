@@ -7,18 +7,18 @@
   <joint name="imu_joint" type="fixed">
     <parent link="base_link" />
     <child link="imu_link" />
-    <origin xyz="0 0 0" rpy="0 0 0" />
+    <origin xyz="0.012 -0.015 0.0805" rpy="0 0 0" />
   </joint>
 
   <joint name="laser_joint" type="fixed">
     <parent link="base_link" />
     <child link="laser_link" />
-    <origin xyz="0 0 0" rpy="0 0 0" />
+    <origin xyz="0 0 0.1461" rpy="0 0 0" />
   </joint>
 
   <joint name="camera_joint" type="fixed">
     <parent link="base_link" />
     <child link="camera_link" />
-    <origin xyz="0.1 0.0 0.08" rpy="0 0 0" />
+    <origin xyz="0.0575 0 0.177" rpy="3.1415926 0 0" />
   </joint>
 </robot>

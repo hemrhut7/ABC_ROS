@@ -9,6 +9,10 @@ def generate_launch_description():
     # Get config directory and params file path
     config_dir = os.path.join(get_package_share_directory('my_robot_bringup'), 'config')
     params_file = os.path.join(config_dir, 'params.yaml')
+    urdf_file = os.path.join(config_dir, 'robot.urdf')
+
+    with open(urdf_file, 'r') as infp:
+        robot_desc = infp.read()
 
     auto_log_arg = DeclareLaunchArgument(
         'auto_log',
@@ -25,6 +29,15 @@ def generate_launch_description():
     return LaunchDescription([
         auto_log_arg,
         mode_arg,
+
+        # 0. Robot State Publisher (Static TF)
+        Node(
+            package='robot_state_publisher',
+            executable='robot_state_publisher',
+            name='robot_state_publisher',
+            output='screen',
+            parameters=[{'robot_description': robot_desc}]
+        ),
 
         Node(
             package='micro_ros_agent',
