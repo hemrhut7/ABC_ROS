@@ -4,7 +4,7 @@
 # VINS-Fusion Stereo + IMU Configuration
 # 適用於 ABC_ROS 機器人平台
 # 雙目相機: Waveshare AR0144 (640x480)
-# IMU: ESP32 (MPU6050/ICM-20948)
+# IMU: ESP32 (ICM-20948)
 # ==============================================================================
 
 # ======================== Common Parameters ========================
@@ -15,7 +15,7 @@ num_of_cam: 2
 imu_topic: "/imu/data_raw"
 image0_topic: "/camera/left/image_raw"
 image1_topic: "/camera/right/image_raw"
-output_path: "/workspace/output/"
+output_path: "./output/"
 
 cam0_calib: "cam0_pinhole.yaml"
 cam1_calib: "cam1_pinhole.yaml"
@@ -31,7 +31,7 @@ use_gpu_ceres: 0
 # Extrinsic parameter between IMU and Camera.
 # 0: Have accurate extrinsic parameters (trust body_T_cam values exactly)
 # 1: Have an initial guess, system will optimize online
-estimate_extrinsic: 1
+estimate_extrinsic: 0
 
 # Transformation from IMU body frame to Camera frame
 # 來源: Kalibr calibration (rosbag_total_20260811_163132)
@@ -59,7 +59,7 @@ multiple_thread: 1
 
 # ======================== Feature Tracker Parameters ========================
 max_cnt: 150            # max feature number in feature tracking
-min_dist: 30            # min distance between two features
+min_dist: 20            # min distance between two features
 freq: 10                # frequency (Hz) of publish tracking result. Set 0 for raw frequency.
 F_threshold: 1.0        # ransac threshold (pixel)
 show_track: 1           # publish tracking image as topic
@@ -72,13 +72,10 @@ max_num_iterations: 8   # max solver iterations
 keyframe_parallax: 10.0 # keyframe selection threshold (pixel)
 
 # ======================== IMU Parameters ========================
-# 來源: Kalibr IMU calibration (rosbag_total_20260811_163132)
-# 注意: VINS-Fusion 的離散噪聲模型需要放大 Kalibr 連續時間噪聲密度值
-#       參考 EuRoC config (acc_n=0.1 vs ADIS16448 density=0.008 → ~12x)
-acc_n: 0.014              # Kalibr 0.001401501 × 10 (m/s^2)
-gyr_n: 0.0013             # Kalibr 0.0001297458 × 10 (rad/s)
-acc_w: 0.0022             # Kalibr 0.0002188452 × 10 (m/s^3)
-gyr_w: 0.00011            # Kalibr 1.098935e-05 × 10 (rad/s^2)
+acc_n: 0.10               # 加速度計噪聲密度 (m/s^2 / sqrt(Hz))
+gyr_n: 0.010              # 陀螺儀噪聲密度 (rad/s / sqrt(Hz))
+acc_w: 0.0010             # 加速度計零偏隨機遊走 (m/s^3 / sqrt(Hz))
+gyr_w: 0.00010            # 陀螺儀零偏隨機遊走 (rad/s^2 / sqrt(Hz))
 g_norm: 9.81007           # gravity magnitude
 
 # ======================== Time Offset ========================

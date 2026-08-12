@@ -28,9 +28,9 @@ Visualization Manager:
       Enabled: true
       Name: VINS Odometry
       Topic:
-        Value: /vins_fusion/odometry
+        Value: /odometry
         Depth: 5
-        Reliability Policy: Reliable
+        Reliability Policy: System Default
       Position Tolerance: 0.1
       Angle Tolerance: 0.1
       Keep: 1
@@ -46,27 +46,27 @@ Visualization Manager:
       Enabled: true
       Name: VINS Path
       Topic:
-        Value: /vins_fusion/path
+        Value: /path
         Depth: 5
-        Reliability Policy: Reliable
+        Reliability Policy: System Default
       Color: 25; 255; 0
       Alpha: 1
       Line Style: Lines
       Line Width: 0.03
     - Class: rviz_default_plugins/Image
-      Enabled: false
+      Enabled: true
       Name: Tracking Image
       Topic:
-        Value: /vins_fusion/image_track
+        Value: /image_track
         Depth: 5
-        Reliability Policy: Reliable
-    - Class: rviz_default_plugins/PointCloud2
+        Reliability Policy: System Default
+    - Class: rviz_default_plugins/PointCloud
       Enabled: true
       Name: Point Cloud
       Topic:
-        Value: /vins_fusion/point_cloud
+        Value: /point_cloud
         Depth: 5
-        Reliability Policy: Reliable
+        Reliability Policy: System Default
       Size (Pixels): 3
       Style: Points
       Color Transformer: FlatColor
@@ -79,7 +79,7 @@ Visualization Manager:
   Value: true
   Views:
     Current:
-      Class: rviz_default_plugins/ThirdPersonFollower
+      Class: rviz_default_plugins/Orbit
       Distance: 10
       Enable Stereo Rendering:
         Value: false
@@ -93,8 +93,8 @@ Visualization Manager:
       Name: Current View
       Near Clip Distance: 0.01
       Pitch: 0.5
-      Target Frame: base_link
-      Value: ThirdPersonFollower (rviz_default_plugins)
+      Target Frame: "<Fixed Frame>"
+      Value: Orbit (rviz_default_plugins)
       Yaw: 0
 Window Geometry:
   Height: 800
