@@ -47,7 +47,8 @@ from tf2_ros import TransformBroadcaster
 from rclpy.qos import qos_profile_sensor_data
 
 from nav_ekf.filters.ins_gnss_kf import INS_GNSS
-from nav_ekf.sensors.params import MTI7_params
+from nav_ekf.sensors.params import ICM20948_params
+from nav_ekf.sensors.tools import accLeveling, magCompassing
 from nav_ekf.filters.constants import EKF_MODE
 from nav_ekf.core.coordinate_transformation import llh2ENU
 
@@ -87,6 +88,7 @@ class InsEkfNode(Node):
         self.declare_parameter('init_cov_v', 0.5)
         self.declare_parameter('init_cov_att', 3.0)  # Initial pitch/roll covariance (deg)
         self.declare_parameter('init_cov_yaw', 30.0) # Initial yaw covariance (deg)
+        self.declare_parameter('init_wait_time', 5.0) # Seconds to collect IMU/mag before EKF start
         
         self.declare_parameter('publish_tf', True)
         self.declare_parameter('map_frame', 'odom')
@@ -95,7 +97,7 @@ class InsEkfNode(Node):
         # --- EKF Initialization ---
         mode = self.get_parameter('ekf_mode').value
         self.kf = INS_GNSS(dim=mode)
-        self.kf.setIMUParams(MTI7_params)
+        self.kf.setIMUParams(ICM20948_params)
         
         # Default params (can be updated via ROS params if needed)
         self.kf.setGNSSParams(np.array([1.0, 1.0, 2.0, 0.1, 0.1, 0.2]))
@@ -114,6 +116,9 @@ class InsEkfNode(Node):
         
         self.initialized = False
         self.last_imu_time = None
+        self.init_start_time = None
+        self.init_acc_buf = []
+        self.init_mag_buf = []
         
         # Buffer for latest sensor data
         self.latest_gnss = None
@@ -170,26 +175,6 @@ class InsEkfNode(Node):
             return
         self.latest_gnss = msg
         self.new_gnss = True
-        
-        if not self.initialized:
-            # Initialize position from first valid GNSS
-            pos0 = np.array([np.deg2rad(msg.latitude), np.deg2rad(msg.longitude), msg.altitude])
-            vel0 = np.zeros(3)
-            att0 = np.array([0.0, 0.0, 0.0]) # Will be improved by static alignment or mag
-            
-            std_p = float(self.get_parameter('init_cov_p').value)
-            std_v = float(self.get_parameter('init_cov_v').value)
-            std_att = np.deg2rad(float(self.get_parameter('init_cov_att').value))
-            std_yaw = np.deg2rad(float(self.get_parameter('init_cov_yaw').value))
-            
-            self.kf.setInitStatus(
-                pos0, vel0, att0,
-                std_pos=std_p, std_vel=std_v, std_ver_ori=std_att, std_yaw=std_yaw
-            )
-            self.initialized = True
-            self.get_logger().info(f"EKF Initialized at LLA: {msg.latitude}, {msg.longitude}, {msg.altitude}")
-            # Set reference for ENU conversion
-            self.ref_lla_rad = pos0
 
     def mag_callback(self, msg):
         # Convert ROS standard FLU (x forward, y left, z up) to EKF standard RFU (x right, y forward, z up)
@@ -231,27 +216,54 @@ class InsEkfNode(Node):
             self.new_vel = True
 
     def imu_callback(self, msg):
-        if not self.initialized:
-            if not self.get_parameter('enable_gnss_pos').value:
-                # If GNSS is disabled, initialize position at origin (0, 0, 0)
-                pos0 = np.array([0.0, 0.0, 0.0])
-                std_p = float(self.get_parameter('init_cov_p').value)
-                std_v = float(self.get_parameter('init_cov_v').value)
-                std_att = np.deg2rad(float(self.get_parameter('init_cov_att').value))
-                std_yaw = np.deg2rad(float(self.get_parameter('init_cov_yaw').value))
-
-                self.kf.setInitStatus(
-                    pos0, np.zeros(3), np.zeros(3),
-                    std_pos=std_p, std_vel=std_v, std_ver_ori=std_att, std_yaw=std_yaw
-                )
-                self.initialized = True
-                self.ref_lla_rad = pos0
-                self.get_logger().info("EKF Initialized without GNSS (default origin LLA 0,0,0)")
-            else:
-                return
-
         curr_t = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
         
+        if not self.initialized:
+            wait_time = float(self.get_parameter('init_wait_time').value)
+            if self.init_start_time is None:
+                self.init_start_time = curr_t
+                self.init_acc_buf = []
+                self.init_mag_buf = []
+                self.get_logger().info(f"EKF initial alignment: waiting {wait_time:.1f}s after first IMU before starting estimation")
+
+            # Convert ROS standard FLU to EKF standard RFU for leveling and mag yaw
+            f = np.array([-msg.linear_acceleration.y, msg.linear_acceleration.x, msg.linear_acceleration.z])
+            self.init_acc_buf.append(f)
+            if self.latest_mag is not None:
+                self.init_mag_buf.append(self.latest_mag)
+
+            if curr_t - self.init_start_time < wait_time:
+                return
+
+            # Use the 5 seconds of collected IMU/mag data for attitude init
+            init_acc = np.nanmean(np.vstack(self.init_acc_buf), axis=0)
+            pitch, roll = accLeveling(init_acc)
+            if len(self.init_mag_buf) > 0:
+                init_mag = np.nanmean(np.vstack(self.init_mag_buf), axis=0)
+                yaw = magCompassing(init_mag, pitch, roll)
+            else:
+                yaw = 0.0
+
+            if self.get_parameter('enable_gnss_pos').value and self.latest_gnss is not None:
+                pos0 = np.array([np.deg2rad(self.latest_gnss.latitude),
+                                 np.deg2rad(self.latest_gnss.longitude),
+                                 self.latest_gnss.altitude])
+            else:
+                pos0 = np.array([0.0, 0.0, 0.0])
+
+            std_p = float(self.get_parameter('init_cov_p').value)
+            std_v = float(self.get_parameter('init_cov_v').value)
+            std_att = np.deg2rad(float(self.get_parameter('init_cov_att').value))
+            std_yaw = np.deg2rad(float(self.get_parameter('init_cov_yaw').value))
+
+            self.kf.setInitStatus(
+                pos0, np.zeros(3), np.array([pitch, roll, yaw]),
+                std_pos=std_p, std_vel=std_v, std_ver_ori=std_att, std_yaw=std_yaw
+            )
+            self.initialized = True
+            self.ref_lla_rad = pos0
+            self.get_logger().info(f"EKF Initialized after {wait_time:.1f}s at LLA: {np.rad2deg(pos0[0])}, {np.rad2deg(pos0[1])}, {pos0[2]}")
+
         # Save raw angular velocity in FLU frame for Odometry msg
         self.latest_w_flu = np.array([msg.angular_velocity.x, msg.angular_velocity.y, msg.angular_velocity.z])
 
