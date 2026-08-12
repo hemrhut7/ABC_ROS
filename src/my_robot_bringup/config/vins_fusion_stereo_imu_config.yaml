@@ -55,7 +55,7 @@ body_T_cam1: !!opencv-matrix
            0.0, 0.0, 0.0, 1.0]
 
 # Multiple thread support
-multiple_thread: 1
+multiple_thread: 4
 
 # ======================== Feature Tracker Parameters ========================
 max_cnt: 150            # max feature number in feature tracking
@@ -85,7 +85,7 @@ estimate_td: 1                      # online estimate time offset between camera
 td: -0.029                          # initial value of time offset (s), from Kalibr calibration
 
 # ======================== Loop Closure ========================
-loop_closure: 0          # 1 to enable loop closure (建議在 Jetson 上先關閉以節省運算)
+loop_closure: 1          # 1 to enable loop closure (建議在 Jetson 上先關閉以節省運算)
 
 # ======================== Visualization ========================
 save_image: 0            # save image in pose graph for visualization purpose
