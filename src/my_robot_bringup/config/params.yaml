@@ -37,7 +37,7 @@ ins_ekf_node:
     enable_agv: true
     block_agv_h: false
     std_agv: [0.1, 0.1, 10.0]
-    lever_arm_agv: [0.0, 0.0, 0.0]
+    lever_arm_agv: [-0.012, 0.015, -0.0805]
     enable_nhc: false
     enable_zupt_hor: false
     press_params: 10.0

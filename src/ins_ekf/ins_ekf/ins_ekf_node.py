@@ -77,7 +77,7 @@ class InsEkfNode(Node):
         self.declare_parameter('enable_agv', True)
         self.declare_parameter('block_agv_h', False)
         self.declare_parameter('std_agv', [0.1, 0.1, 10.0])
-        self.declare_parameter('lever_arm_agv', [0.0, 0.0, 0.0])
+        self.declare_parameter('lever_arm_agv', [-0.012, 0.015, -0.0805])
         self.declare_parameter('enable_nhc', False)
         self.declare_parameter('enable_zupt_hor', False)
         self.declare_parameter('press_params', 10.0)
@@ -94,6 +94,14 @@ class InsEkfNode(Node):
         self.declare_parameter('map_frame', 'odom')
         self.declare_parameter('base_link_frame', 'base_link')
 
+        # Pre-allocate static conversion matrices
+        # Transformation from ROS FLU to EKF RFU
+        self.R_flu2rfu = np.array([
+            [0, -1, 0],
+            [1, 0, 0],
+            [0, 0, 1]
+        ])
+
         # --- EKF Initialization ---
         mode = self.get_parameter('ekf_mode').value
         self.kf = INS_GNSS(dim=mode)
@@ -104,8 +112,10 @@ class InsEkfNode(Node):
         
         std_agv = tuple(self.get_parameter('std_agv').value)
         block_agv_h = self.get_parameter('block_agv_h').value
-        lever_arm_agv = tuple(self.get_parameter('lever_arm_agv').value)
-        self.kf.setAGVParams(std_vel=std_agv, is_block_hei=block_agv_h, lever_arm=lever_arm_agv)
+        lever_arm_agv_flu = np.array(self.get_parameter('lever_arm_agv').value, dtype=float)
+        # Convert ROS FLU (x forward, y left, z up) to EKF RFU (x right, y forward, z up)
+        lever_arm_agv_rfu = self.R_flu2rfu @ lever_arm_agv_flu
+        self.kf.setAGVParams(std_vel=std_agv, is_block_hei=block_agv_h, lever_arm=lever_arm_agv_rfu)
         
         press_params = float(self.get_parameter('press_params').value)
         self.kf.setPressParams(press_params)
@@ -133,14 +143,6 @@ class InsEkfNode(Node):
         self.new_baro = False
         self.new_vel = False
         self.latest_vel_time = 0.0
-
-        # Pre-allocate static conversion matrices
-        # Transformation from ROS FLU to EKF RFU
-        self.R_flu2rfu = np.array([
-            [0, -1, 0],
-            [1, 0, 0],
-            [0, 0, 1]
-        ])
 
         # --- Subscriptions ---
         self.imu_sub = self.create_subscription(
