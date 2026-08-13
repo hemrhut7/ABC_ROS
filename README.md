@@ -234,3 +234,13 @@ sudo nvpmodel -m 0
 ```
 sudo chown -R hank:hank ros2_bag/
 ```
+
+### 🔬 深層 SLAM 技術原因
+
+1. 稀疏視覺角點 (Sparse Features) vs 密集 2D 射線 (Dense Scans)：
+    • Cartographer 的 2D 佔用網格建立 (range_data_inserter_2d) 需要像 2D 雷達一樣提供 360 度密集的封閉牆面線條，才能進行射線投射 (Ray-casting) 來更新自由空間與障礙物。
+    • VINS 輸出的點雲為 稀疏 3D 特徵角點 (每幀僅 20~80 個孤立散點)。投影至 2D 平面後缺乏連續牆面幾何特徵，使得 Cartographer 正則化掃描匹配器
+    (real_time_correlative_scan_matcher_2d) 計算出的有效約束為 0。
+2. 總結建議：
+    • VINS-Fusion 的強項在於提供高精度的 3D 姿態與軌跡 (VIO Odometry)。
+    • 若要建立 2D 網格地圖，必須保留 2D 雷達 (LaserScan)，或者將雙目相機生成的稠密深度圖 (Dense Depth Map) 轉換為虛擬 LaserScan 才能穩定構建 2D 佔用網格地圖。
