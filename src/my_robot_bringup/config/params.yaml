@@ -21,6 +21,7 @@ data_logger_node:
 
 ins_ekf_node:
   ros__parameters:
+    use_sim_time: false
     ekf_mode: 16
     imu_topic: "/imu/data_raw"
     gnss_topic: "/gnss/fix"
@@ -37,7 +38,7 @@ ins_ekf_node:
     enable_baro: true
     enable_agv: true
     block_agv_h: false
-    std_agv: [0.1, 0.1, 10.0]
+    std_agv: [0.1, 0.1, 0.1]
     lever_arm_agv: [-0.012, 0.015, -0.0805]
     enable_nhc: false
     enable_zupt_hor: false

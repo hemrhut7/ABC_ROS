@@ -57,6 +57,8 @@ class InsEkfNode(Node):
         super().__init__('ins_ekf_node')
 
         # --- Parameters ---
+        if not self.has_parameter('use_sim_time'):
+            self.declare_parameter('use_sim_time', False)
         self.declare_parameter('ekf_mode', EKF_MODE.STATE_16)
         self.declare_parameter('imu_topic', '/imu/data_raw')
         self.declare_parameter('gnss_topic', '/gnss/fix')
@@ -206,7 +208,11 @@ class InsEkfNode(Node):
     def vel_callback(self, msg):
         # Body velocity (e.g. from encoder TwistStamped)
         self.latest_vel = np.array([msg.twist.linear.x, msg.twist.linear.y, msg.twist.linear.z])
-        self.latest_vel_time = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+        stamp = msg.header.stamp
+        t_sec = stamp.sec + stamp.nanosec * 1e-9
+        if t_sec == 0.0:
+            t_sec = self.get_clock().now().nanoseconds * 1e-9
+        self.latest_vel_time = t_sec
         self.new_vel = True
 
     def joint_states_callback(self, msg):
@@ -225,11 +231,27 @@ class InsEkfNode(Node):
             v_x = r * (l_vel + r_vel) / 2.0
 
             self.latest_vel = np.array([v_x, 0.0, 0.0])
-            self.latest_vel_time = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+            stamp = msg.header.stamp
+            t_sec = stamp.sec + stamp.nanosec * 1e-9
+            if t_sec == 0.0:
+                t_sec = self.get_clock().now().nanoseconds * 1e-9
+            self.latest_vel_time = t_sec
             self.new_vel = True
 
     def imu_callback(self, msg):
-        curr_t = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+        stamp = msg.header.stamp
+        curr_t = stamp.sec + stamp.nanosec * 1e-9
+        if curr_t == 0.0:
+            stamp = self.get_clock().now().to_msg()
+            curr_t = stamp.sec + stamp.nanosec * 1e-9
+        
+        if self.init_start_time is not None and curr_t < self.init_start_time:
+            self.get_logger().warn("Time jump backwards detected (sim time reset?), re-initializing EKF alignment.")
+            self.initialized = False
+            self.init_start_time = None
+            self.init_acc_buf = []
+            self.init_mag_buf = []
+            self.last_imu_time = None
         
         if not self.initialized:
             wait_time = float(self.get_parameter('init_wait_time').value)
@@ -336,9 +358,11 @@ class InsEkfNode(Node):
         self.new_vel = False
 
         # Publish Results
-        self.publish_results(msg.header.stamp)
+        self.publish_results(stamp)
 
     def publish_results(self, stamp):
+        if stamp.sec == 0 and stamp.nanosec == 0:
+            stamp = self.get_clock().now().to_msg()
         # 1. Get current state from EKF (LLA, ENU Vel, Euler)
         pos_lla_rad = self.kf.me.pos # [lat, lon, alt]
         vel_enu = self.kf.me.vel     # EKF navigation frame is already ENU
