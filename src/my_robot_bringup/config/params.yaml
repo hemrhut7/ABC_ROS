@@ -8,6 +8,7 @@ image_splitter_node:
     frame_id: "camera_link"
     rotation_angle: 180
     jpeg_quality: 60
+    publish_fps: 15  # Throttle publish rate for remote viewing (0 = no throttle, use capture fps)
 
 esp32_serial_node:
   ros__parameters: {}
@@ -57,7 +58,7 @@ n10_lidar_node:
     baud_rate: 230400
     frame_id: "laser_link"
     topic_name: "/scan"
-    range_min: 0.1
+    range_min: 0.15
     range_max: 12.0
 
 
