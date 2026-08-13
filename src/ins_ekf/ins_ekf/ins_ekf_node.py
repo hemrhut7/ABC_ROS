@@ -41,7 +41,7 @@ from scipy.spatial.transform import Rotation
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Imu, NavSatFix, MagneticField, FluidPressure, JointState
-from nav_msgs.msg import Odometry
+from nav_msgs.msg import Odometry, Path
 from geometry_msgs.msg import TwistStamped, PoseStamped, Quaternion, TransformStamped
 from tf2_ros import TransformBroadcaster
 from rclpy.qos import qos_profile_sensor_data
@@ -76,7 +76,7 @@ class InsEkfNode(Node):
         self.declare_parameter('enable_baro', True)
         self.declare_parameter('enable_agv', True)
         self.declare_parameter('block_agv_h', False)
-        self.declare_parameter('std_agv', [0.1, 0.1, 10.0])
+        self.declare_parameter('std_agv', [0.1, 0.1, 0.1])
         self.declare_parameter('lever_arm_agv', [-0.012, 0.015, -0.0805])
         self.declare_parameter('enable_nhc', False)
         self.declare_parameter('enable_zupt_hor', False)
@@ -93,6 +93,10 @@ class InsEkfNode(Node):
         self.declare_parameter('publish_tf', True)
         self.declare_parameter('map_frame', 'odom')
         self.declare_parameter('base_link_frame', 'base_link')
+
+        self.declare_parameter('path_min_dist', 0.05)  # meters
+        self.declare_parameter('path_max_size', 1000)  # max pose points
+        self.declare_parameter('path_pub_rate', 0.2)   # max publish interval in seconds (5Hz)
 
         # Pre-allocate static conversion matrices
         # Transformation from ROS FLU to EKF RFU
@@ -168,7 +172,14 @@ class InsEkfNode(Node):
         # --- Publishers ---
         self.odom_pub = self.create_publisher(Odometry, 'ins/odometry', 10)
         self.pose_pub = self.create_publisher(PoseStamped, 'ins/pose', 10)
+        self.path_pub = self.create_publisher(Path, 'ins/path', 10)
         self.tf_broadcaster = TransformBroadcaster(self)
+
+        # Path accumulator & optimization
+        self.path_msg = Path()
+        self.path_msg.header.frame_id = self.get_parameter('map_frame').value
+        self.last_path_pos = None
+        self.last_path_pub_time = 0.0
 
         self.get_logger().info(f"INS EKF Node started in mode {mode}")
 
@@ -374,6 +385,35 @@ class InsEkfNode(Node):
         pose.header = odom.header
         pose.pose = odom.pose.pose
         self.pose_pub.publish(pose)
+
+        # Publish path with distance filtering, max size cap, and rate throttling
+        min_dist = float(self.get_parameter('path_min_dist').value)
+        max_size = int(self.get_parameter('path_max_size').value)
+        pub_rate = float(self.get_parameter('path_pub_rate').value)
+
+        curr_t = stamp.sec + stamp.nanosec * 1e-9
+        should_append = False
+
+        if self.last_path_pos is None:
+            should_append = True
+        else:
+            dx = pos_enu[0] - self.last_path_pos[0]
+            dy = pos_enu[1] - self.last_path_pos[1]
+            dz = pos_enu[2] - self.last_path_pos[2]
+            if (dx * dx + dy * dy + dz * dz) >= (min_dist * min_dist):
+                should_append = True
+
+        if should_append:
+            self.last_path_pos = pos_enu.copy()
+            self.path_msg.poses.append(pose)
+            if max_size > 0 and len(self.path_msg.poses) > max_size:
+                self.path_msg.poses.pop(0)
+
+        if curr_t - self.last_path_pub_time >= pub_rate:
+            if len(self.path_msg.poses) > 0:
+                self.path_msg.header.stamp = stamp
+                self.path_pub.publish(self.path_msg)
+                self.last_path_pub_time = curr_t
         
         if self.get_parameter('publish_tf').value:
             t = TransformStamped()
