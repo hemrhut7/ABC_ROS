@@ -25,6 +25,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'pointcloud_converter_node = my_robot_bringup.pointcloud_converter_node:main',
         ],
     },
 )
