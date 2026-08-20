@@ -29,7 +29,7 @@ ins_ekf_node:
     baro_topic: "/baro/pressure"
     vel_topic: "/velocity"
     joint_states_topic: "/joint_states"
-    wheel_radius: 0.0325
+    wheel_radius: 0.0305
     wheel_separation: 0.20
     use_joint_states: true
     enable_gnss_pos: false

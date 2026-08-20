@@ -66,7 +66,7 @@ class InsEkfNode(Node):
         self.declare_parameter('baro_topic', '/baro/pressure')
         self.declare_parameter('vel_topic', '/velocity') # Body velocity / Encoder
         self.declare_parameter('joint_states_topic', '/joint_states')
-        self.declare_parameter('wheel_radius', 0.0325)     # Default 3.25cm
+        self.declare_parameter('wheel_radius', 0.0305)     # Default 3.05cm (calibrated loaded rolling radius)
         self.declare_parameter('wheel_separation', 0.20) # Default 0.20 m
         self.declare_parameter('left_wheel_name', 'left_wheel')
         self.declare_parameter('right_wheel_name', 'right_wheel')
