@@ -1,6 +1,7 @@
 image_splitter_node:
   ros__parameters:
     video_device: 0
+    auto_detect_device: true
     width: 1280
     height: 480
     fps: 60

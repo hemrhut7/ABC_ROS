@@ -13,6 +13,10 @@
 #include <memory>
 #include <vector>
 #include <cctype>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+#include <linux/videodev2.h>
 
 class ImageSplitterNode : public rclcpp::Node
 {
@@ -24,6 +28,7 @@ public:
   {
     // Declare parameters
     this->declare_parameter<int>("video_device", 0);
+    this->declare_parameter<bool>("auto_detect_device", true);
     this->declare_parameter<int>("width", 1280);
     this->declare_parameter<int>("height", 480);
     this->declare_parameter<int>("fps", 60);
@@ -34,6 +39,7 @@ public:
 
     // Get parameters
     video_device_ = this->get_parameter("video_device").as_int();
+    auto_detect_device_ = this->get_parameter("auto_detect_device").as_bool();
     width_ = this->get_parameter("width").as_int();
     height_ = this->get_parameter("height").as_int();
     fps_ = this->get_parameter("fps").as_int();
@@ -49,14 +55,15 @@ public:
 
     RCLCPP_INFO(this->get_logger(),
       "Initializing Image Splitter Node (rclcpp C++):\n"
-      "  Device: /dev/video%d\n"
+      "  Preferred Device: /dev/video%d (Auto Scan: %s)\n"
       "  Target Resolution: %dx%d\n"
       "  Target FPS: %d\n"
       "  Target Format (FOURCC): %s\n"
       "  Frame ID: %s\n"
       "  Rotation Angle: %d\n"
       "  JPEG Quality: %d",
-      video_device_, width_, height_, fps_, fourcc_.c_str(),
+      video_device_, auto_detect_device_ ? "Enabled" : "Disabled",
+      width_, height_, fps_, fourcc_.c_str(),
       frame_id_.c_str(), rotation_angle_, jpeg_quality_);
 
     // Initialize publishers
@@ -71,14 +78,17 @@ public:
     left_info_pub_ = this->create_publisher<sensor_msgs::msg::CameraInfo>("camera/left/camera_info", 10);
     right_info_pub_ = this->create_publisher<sensor_msgs::msg::CameraInfo>("camera/right/camera_info", 10);
 
-    // Initialize camera capture
-    cap_.open(video_device_, cv::CAP_V4L2);
-    if (!cap_.isOpened()) {
-      RCLCPP_ERROR(this->get_logger(), "Failed to open video device /dev/video%d", video_device_);
+    // Initialize camera capture with auto-scan support
+    int active_device = find_working_camera_device(video_device_, auto_detect_device_);
+    if (active_device < 0 || !cap_.isOpened()) {
+      RCLCPP_ERROR(this->get_logger(),
+        "Failed to open any video capture device (Preferred /dev/video%d, Auto-scan: %s).",
+        video_device_, auto_detect_device_ ? "true" : "false");
       throw std::runtime_error("Could not open video device");
     }
+    video_device_ = active_device;
 
-    RCLCPP_INFO(this->get_logger(), "Configuring camera parameters...");
+    RCLCPP_INFO(this->get_logger(), "Configuring camera parameters on /dev/video%d...", video_device_);
 
     // Method 1: FOURCC -> Resolution -> FPS
     if (fourcc_.length() == 4) {
@@ -341,8 +351,79 @@ private:
     publisher->publish(info_msg);
   }
 
+  bool is_v4l2_capture_device(int index, std::string & card_name)
+  {
+    std::string dev_path = "/dev/video" + std::to_string(index);
+    int fd = open(dev_path.c_str(), O_RDWR | O_NONBLOCK, 0);
+    if (fd < 0) {
+      return false;
+    }
+    struct v4l2_capability cap;
+    if (ioctl(fd, VIDIOC_QUERYCAP, &cap) < 0) {
+      close(fd);
+      return false;
+    }
+    close(fd);
+
+    uint32_t caps = cap.capabilities;
+    if (caps & V4L2_CAP_DEVICE_CAPS) {
+      caps = cap.device_caps;
+    }
+    if (!(caps & (V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_VIDEO_CAPTURE_MPLANE))) {
+      return false;
+    }
+
+    card_name = reinterpret_cast<const char *>(cap.card);
+    return true;
+  }
+
+  int find_working_camera_device(int preferred_device, bool auto_scan)
+  {
+    std::string card_name;
+    // 1. Attempt preferred device first if index is non-negative
+    if (preferred_device >= 0) {
+      if (is_v4l2_capture_device(preferred_device, card_name)) {
+        if (cap_.open(preferred_device, cv::CAP_V4L2)) {
+          RCLCPP_INFO(this->get_logger(),
+            "Successfully opened preferred camera at /dev/video%d (%s)",
+            preferred_device, card_name.c_str());
+          return preferred_device;
+        }
+      }
+      RCLCPP_WARN(this->get_logger(),
+        "Failed to open preferred camera at /dev/video%d.", preferred_device);
+      if (!auto_scan) {
+        return -1;
+      }
+      RCLCPP_INFO(this->get_logger(), "Starting auto-scan for available video devices (/dev/video0 ~ /dev/video63)...");
+    }
+
+    // 2. Scan available capture devices (/dev/video0 to /dev/video63)
+    for (int dev_idx = 0; dev_idx < 64; ++dev_idx) {
+      if (dev_idx == preferred_device) {
+        continue;
+      }
+      if (!is_v4l2_capture_device(dev_idx, card_name)) {
+        continue;
+      }
+
+      RCLCPP_INFO(this->get_logger(),
+        "Testing V4L2 capture device /dev/video%d (%s)...", dev_idx, card_name.c_str());
+
+      if (cap_.open(dev_idx, cv::CAP_V4L2)) {
+        RCLCPP_INFO(this->get_logger(),
+          "Auto-scan successfully found and opened camera at /dev/video%d (%s)",
+          dev_idx, card_name.c_str());
+        return dev_idx;
+      }
+    }
+
+    return -1;
+  }
+
   // Parameters
   int video_device_;
+  bool auto_detect_device_;
   int width_;
   int height_;
   int fps_;
