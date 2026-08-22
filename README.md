@@ -67,6 +67,12 @@ graph TD
    - **關鍵檔案**：
      - [image_splitter_node.py](src/my_robot_perception/my_robot_perception/image_splitter_node.py)：讀取雙目廣角相機的 2560x720 影像，切割為左右兩張 1280x720 影像，並同時發布 Raw 與 Compressed 格式，以及 CameraInfo 校正資訊，降低網路頻寬消耗。
 
+4. **[isaac_ros (cuVSLAM)](src/isaac_ros)**
+   - **功能描述**：NVIDIA 硬體加速雙目視覺里程計與特徵點雲建圖。
+   - **關鍵模組**：
+     - [isaac_ros_visual_slam](src/isaac_ros/isaac_ros_visual_slam)：cuVSLAM 核心節點，支援雙目視覺里程計與 IMU 融合（VIO）。
+     - [isaac_ros_nitros](src/isaac_ros/isaac_ros_nitros)：NVIDIA GXF 底層零拷貝記憶體與硬體加速傳輸框架。
+
 ---
 
 ## 🔨 環境建置與執行教學 (Docker 容器環境)
@@ -139,6 +145,95 @@ ros2 launch my_robot_bringup robot.launch.py
 ```bash
 ros2 run my_robot_perception image_splitter_node
 ```
+
+---
+
+## 👁️ NVIDIA cuVSLAM (Visual SLAM) 啟動與驗證指引
+
+專案已整合 **NVIDIA Isaac ROS cuVSLAM**（`isaac_ros_visual_slam`），可利用 Jetson Orin Nano 的 GPU 與 VPI 3 硬體加速實現高幀率的雙目視覺里程計（Visual Odometry）與 SLAM 地圖特徵建置。
+
+### 1. 啟動包含 GPU 與 VPI 3 的 Docker 容器
+在 Jetson Host 端執行以下指令（需掛載 VPI 3 與設備驅動）：
+
+```bash
+docker run -it --rm --runtime nvidia \
+  --net=host \
+  --privileged \
+  -v /dev:/dev \
+  -v ~/ROS_ABC:/workspace \
+  -v /opt/nvidia/vpi3:/opt/nvidia/vpi3 \
+  -v /usr/lib/cmake/vpi3:/usr/lib/cmake/vpi3 \
+  ros:humble-ros-base-hank bash
+```
+
+進入容器後載入工作空間：
+```bash
+source /opt/ros/humble/install/setup.bash
+source /workspace/install/setup.bash
+```
+
+### 2. 搭配機器人現有硬體 (`my_robot_bringup`) 雙目視覺啟動
+
+* **終端 A（啟動機器人硬體與雙目相機影像切割）：**
+  ```bash
+  ros2 launch my_robot_bringup robot.launch.py
+  ```
+
+* **終端 B（啟動 cuVSLAM 進行視覺里程計運算）：**
+  ```bash
+  ros2 run isaac_ros_visual_slam isaac_ros_visual_slam --ros-args \
+    -p num_cameras:=2 \
+    -p rectified_images:=false \
+    -p enable_imu_fusion:=true \
+    -p base_frame:=base_link \
+    -p imu_frame:=imu_link \
+    -r visual_slam/image_0:=/camera/left/image_raw \
+    -r visual_slam/camera_info_0:=/camera/left/camera_info \
+    -r visual_slam/image_1:=/camera/right/image_raw \
+    -r visual_slam/camera_info_1:=/camera/right/camera_info \
+    -r visual_slam/imu:=/imu/data_raw
+  ```
+
+> [!TIP]
+> - 若相機送出的影像尚未經過去畸變校正，設定 `-p rectified_images:=false`，cuVSLAM 將會依據 `camera_info` 自動校正。
+> - 若初期除錯不使用 IMU 融合，可將 `-p enable_imu_fusion:=false` 進行純視覺里程計（VO）測試。
+
+### 3. 其他啟動模式
+
+* **模式 A：Intel RealSense 相機整合啟動**
+  ```bash
+  ros2 launch isaac_ros_visual_slam isaac_ros_visual_slam_realsense.launch.py
+  ```
+
+* **模式 B：獨立 Standalone 節點啟動**
+  ```bash
+  ros2 launch isaac_ros_visual_slam isaac_ros_visual_slam.launch.py
+  ```
+
+### 4. 關鍵主題 (Topics) 列表
+
+| 類型 | 主題名稱 | 訊息格式 | 說明 |
+| :--- | :--- | :--- | :--- |
+| **輸入** | `visual_slam/image_0`, `image_1` | `sensor_msgs/msg/Image` | 左 / 右鏡頭影像輸入 |
+| **輸入** | `visual_slam/camera_info_0`, `1` | `sensor_msgs/msg/CameraInfo` | 左 / 右鏡頭相機內參 |
+| **輸入** | `visual_slam/imu` | `sensor_msgs/msg/Imu` | IMU 姿態/加速度數據 (選填) |
+| **輸出** | `/visual_slam/tracking/odometry` | `nav_msgs/msg/Odometry` | 即時估算的機器人位姿與速度 |
+| **輸出** | `/visual_slam/tracking/slam_path` | `nav_msgs/msg/Path` | 運動歷史軌跡 Path |
+| **輸出** | `/visual_slam/vis/landmarks_cloud`| `sensor_msgs/msg/PointCloud2` | 3D 特徵點雲（視覺化地圖） |
+| **輸出** | `/tf` | `tf2_msgs/msg/TFMessage` | `odom` $\rightarrow$ `base_link` 坐標變換 |
+
+### 5. PC 端 RViz2 遠端視覺化監控
+
+強烈建議將 RViz2 運行在同區域網路的 **PC 端**（保持 Jetson 端無頭運行，以節省 GPU/記憶體頻寬）：
+
+1. 確保 PC 與 Jetson 設定相同的 Domain ID：`export ROS_DOMAIN_ID=0`
+2. 在 PC 端開啟 RViz2：`rviz2`
+3. 將 **Fixed Frame** 設為 `odom`
+4. 加入 Display 主題：
+   - **Path** $\rightarrow$ Topic: `/visual_slam/tracking/slam_path`
+   - **PointCloud2** $\rightarrow$ Topic: `/visual_slam/vis/landmarks_cloud`
+   - **Odometry** $\rightarrow$ Topic: `/visual_slam/tracking/odometry`
+   - **TF** $\rightarrow$ 勾選顯示坐標軸變化
 
 ---
 
