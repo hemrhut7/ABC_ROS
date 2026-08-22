@@ -1,6 +1,7 @@
 image_splitter_node:
   ros__parameters:
     video_device: 0
+    auto_detect_device: true
     width: 1280
     height: 480
     fps: 60
@@ -8,6 +9,7 @@ image_splitter_node:
     frame_id: "camera_link"
     rotation_angle: 180
     jpeg_quality: 60
+    publish_fps: 15  # Throttle publish rate for remote viewing (0 = no throttle, use capture fps)
 
 esp32_serial_node:
   ros__parameters: {}
@@ -20,6 +22,7 @@ data_logger_node:
 
 ins_ekf_node:
   ros__parameters:
+    use_sim_time: false
     ekf_mode: 16
     imu_topic: "/imu/data_raw"
     gnss_topic: "/gnss/fix"
@@ -27,7 +30,7 @@ ins_ekf_node:
     baro_topic: "/baro/pressure"
     vel_topic: "/velocity"
     joint_states_topic: "/joint_states"
-    wheel_radius: 0.0325
+    wheel_radius: 0.0305
     wheel_separation: 0.20
     use_joint_states: true
     enable_gnss_pos: false
@@ -36,7 +39,7 @@ ins_ekf_node:
     enable_baro: true
     enable_agv: true
     block_agv_h: false
-    std_agv: [0.1, 0.1, 10.0]
+    std_agv: [0.1, 0.1, 0.1]
     lever_arm_agv: [-0.012, 0.015, -0.0805]
     enable_nhc: false
     enable_zupt_hor: false
@@ -57,7 +60,7 @@ n10_lidar_node:
     baud_rate: 230400
     frame_id: "laser_link"
     topic_name: "/scan"
-    range_min: 0.1
+    range_min: 0.15
     range_max: 12.0
 
 

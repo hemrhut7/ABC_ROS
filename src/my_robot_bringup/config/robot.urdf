@@ -19,6 +19,22 @@
   <joint name="camera_joint" type="fixed">
     <parent link="base_link" />
     <child link="camera_link" />
-    <origin xyz="0.0575 0 0.177" rpy="3.1415926 0 0" />
+    <origin xyz="0.0575 0 0.177" rpy="0 0 0" />
+  </joint>
+
+  <!-- Stereo camera left/right frames (adjust y offset to match actual baseline) -->
+  <link name="left_camera_link" />
+  <link name="right_camera_link" />
+
+  <joint name="left_camera_joint" type="fixed">
+    <parent link="camera_link" />
+    <child link="left_camera_link" />
+    <origin xyz="0 0.02875 0" rpy="0 0 0" />
+  </joint>
+
+  <joint name="right_camera_joint" type="fixed">
+    <parent link="camera_link" />
+    <child link="right_camera_link" />
+    <origin xyz="0 -0.02875 0" rpy="0 0 0" />
   </joint>
 </robot>

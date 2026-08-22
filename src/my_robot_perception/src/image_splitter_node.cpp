@@ -13,27 +13,33 @@
 #include <memory>
 #include <vector>
 #include <cctype>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+#include <linux/videodev2.h>
 
 class ImageSplitterNode : public rclcpp::Node
 {
 public:
   ImageSplitterNode()
   : Node("image_splitter_node"),
-    running_(false),
-    frame_count_(0)
+    running_(false)
   {
     // Declare parameters
     this->declare_parameter<int>("video_device", 0);
+    this->declare_parameter<bool>("auto_detect_device", true);
     this->declare_parameter<int>("width", 1280);
     this->declare_parameter<int>("height", 480);
     this->declare_parameter<int>("fps", 60);
     this->declare_parameter<std::string>("fourcc", "MJPG");
     this->declare_parameter<std::string>("frame_id", "camera_link");
-    this->declare_parameter<int>("rotation_angle", 0);
+    this->declare_parameter<int>("rotation_angle", 180);
     this->declare_parameter<int>("jpeg_quality", 60);
+    this->declare_parameter<int>("publish_fps", 0);  // 0 = same as capture fps (no throttle)
 
     // Get parameters
     video_device_ = this->get_parameter("video_device").as_int();
+    auto_detect_device_ = this->get_parameter("auto_detect_device").as_bool();
     width_ = this->get_parameter("width").as_int();
     height_ = this->get_parameter("height").as_int();
     fps_ = this->get_parameter("fps").as_int();
@@ -41,6 +47,13 @@ public:
     frame_id_ = this->get_parameter("frame_id").as_string();
     rotation_angle_ = this->get_parameter("rotation_angle").as_int();
     jpeg_quality_ = this->get_parameter("jpeg_quality").as_int();
+    publish_fps_ = this->get_parameter("publish_fps").as_int();
+
+    if (publish_fps_ > 0) {
+      publish_interval_ms_ = 1000.0 / publish_fps_;
+      RCLCPP_INFO(this->get_logger(), "Publish rate throttled to %d FPS (interval: %.1f ms)",
+        publish_fps_, publish_interval_ms_);
+    }
 
     // Capitalize fourcc
     for (auto & c : fourcc_) {
@@ -49,36 +62,44 @@ public:
 
     RCLCPP_INFO(this->get_logger(),
       "Initializing Image Splitter Node (rclcpp C++):\n"
-      "  Device: /dev/video%d\n"
+      "  Preferred Device: /dev/video%d (Auto Scan: %s)\n"
       "  Target Resolution: %dx%d\n"
       "  Target FPS: %d\n"
       "  Target Format (FOURCC): %s\n"
       "  Frame ID: %s\n"
       "  Rotation Angle: %d\n"
       "  JPEG Quality: %d",
-      video_device_, width_, height_, fps_, fourcc_.c_str(),
+      video_device_, auto_detect_device_ ? "Enabled" : "Disabled",
+      width_, height_, fps_, fourcc_.c_str(),
       frame_id_.c_str(), rotation_angle_, jpeg_quality_);
 
     // Initialize publishers
-    stereo_pub_ = this->create_publisher<sensor_msgs::msg::Image>("camera/stereo/image_raw", 10);
-    left_pub_ = this->create_publisher<sensor_msgs::msg::Image>("camera/left/image_raw", 10);
-    right_pub_ = this->create_publisher<sensor_msgs::msg::Image>("camera/right/image_raw", 10);
+    // RELIABLE: compatible with both RELIABLE and BEST_EFFORT subscribers (RVIZ2 uses RELIABLE)
+    // VOLATILE + KeepLast(5): avoid buffering stale frames over network
+    auto sensor_qos = rclcpp::QoS(rclcpp::KeepLast(5))
+      .reliable()
+      .durability_volatile();
 
-    stereo_compressed_pub_ = this->create_publisher<sensor_msgs::msg::CompressedImage>("camera/stereo/image_raw/compressed", 10);
-    left_compressed_pub_ = this->create_publisher<sensor_msgs::msg::CompressedImage>("camera/left/image_raw/compressed", 10);
-    right_compressed_pub_ = this->create_publisher<sensor_msgs::msg::CompressedImage>("camera/right/image_raw/compressed", 10);
+    left_pub_ = this->create_publisher<sensor_msgs::msg::Image>("camera/left/image_raw", sensor_qos);
+    right_pub_ = this->create_publisher<sensor_msgs::msg::Image>("camera/right/image_raw", sensor_qos);
 
-    left_info_pub_ = this->create_publisher<sensor_msgs::msg::CameraInfo>("camera/left/camera_info", 10);
-    right_info_pub_ = this->create_publisher<sensor_msgs::msg::CameraInfo>("camera/right/camera_info", 10);
+    left_compressed_pub_ = this->create_publisher<sensor_msgs::msg::CompressedImage>("camera/left/image_raw/compressed", sensor_qos);
+    right_compressed_pub_ = this->create_publisher<sensor_msgs::msg::CompressedImage>("camera/right/image_raw/compressed", sensor_qos);
 
-    // Initialize camera capture
-    cap_.open(video_device_, cv::CAP_V4L2);
-    if (!cap_.isOpened()) {
-      RCLCPP_ERROR(this->get_logger(), "Failed to open video device /dev/video%d", video_device_);
+    left_info_pub_ = this->create_publisher<sensor_msgs::msg::CameraInfo>("camera/left/camera_info", sensor_qos);
+    right_info_pub_ = this->create_publisher<sensor_msgs::msg::CameraInfo>("camera/right/camera_info", sensor_qos);
+
+    // Initialize camera capture with auto-scan support
+    int active_device = find_working_camera_device(video_device_, auto_detect_device_);
+    if (active_device < 0 || !cap_.isOpened()) {
+      RCLCPP_ERROR(this->get_logger(),
+        "Failed to open any video capture device (Preferred /dev/video%d, Auto-scan: %s).",
+        video_device_, auto_detect_device_ ? "true" : "false");
       throw std::runtime_error("Could not open video device");
     }
+    video_device_ = active_device;
 
-    RCLCPP_INFO(this->get_logger(), "Configuring camera parameters...");
+    RCLCPP_INFO(this->get_logger(), "Configuring camera parameters on /dev/video%d...", video_device_);
 
     // Method 1: FOURCC -> Resolution -> FPS
     if (fourcc_.length() == 4) {
@@ -172,18 +193,25 @@ private:
   {
     auto start_time = std::chrono::steady_clock::now();
 
-    size_t stereo_raw_subs = stereo_pub_->get_subscription_count();
-    size_t stereo_comp_subs = stereo_compressed_pub_->get_subscription_count();
+    // Throttle publish rate if publish_fps is set
+    if (publish_fps_ > 0) {
+      double elapsed_ms = std::chrono::duration<double, std::milli>(
+        start_time - last_publish_time_).count();
+      if (elapsed_ms < publish_interval_ms_) {
+        return;
+      }
+      last_publish_time_ = start_time;
+    }
+
     size_t left_raw_subs = left_pub_->get_subscription_count();
     size_t left_comp_subs = left_compressed_pub_->get_subscription_count();
     size_t right_raw_subs = right_pub_->get_subscription_count();
     size_t right_comp_subs = right_compressed_pub_->get_subscription_count();
 
-    bool any_stereo = (stereo_raw_subs > 0) || (stereo_comp_subs > 0);
     bool any_left = (left_raw_subs > 0) || (left_comp_subs > 0);
     bool any_right = (right_raw_subs > 0) || (right_comp_subs > 0);
 
-    if (!any_stereo && !any_left && !any_right) {
+    if (!any_left && !any_right) {
       return;
     }
 
@@ -197,34 +225,6 @@ private:
 
     rclcpp::Time timestamp = this->get_clock()->now();
 
-    // Stereo frame
-    if (any_stereo) {
-      try {
-        std_msgs::msg::Header stereo_header;
-        stereo_header.stamp = timestamp;
-        stereo_header.frame_id = frame_id_;
-
-        if (stereo_raw_subs > 0) {
-          sensor_msgs::msg::Image::SharedPtr stereo_msg =
-            cv_bridge::CvImage(stereo_header, "bgr8", frame).toImageMsg();
-          stereo_pub_->publish(*stereo_msg);
-        }
-
-        if (stereo_comp_subs > 0) {
-          std::vector<uchar> buf;
-          std::vector<int> params = {cv::IMWRITE_JPEG_QUALITY, jpeg_quality_};
-          if (cv::imencode(".jpg", frame, buf, params)) {
-            sensor_msgs::msg::CompressedImage comp_msg;
-            comp_msg.header = stereo_header;
-            comp_msg.format = "jpeg";
-            comp_msg.data = buf;
-            stereo_compressed_pub_->publish(comp_msg);
-          }
-        }
-      } catch (const std::exception & e) {
-        RCLCPP_ERROR(this->get_logger(), "Error publishing stereo image: %s", e.what());
-      }
-    }
 
     // Split left and right images
     if (any_left || any_right) {
@@ -298,16 +298,16 @@ private:
       }
     }
 
-    // Diagnostic logging every 150 frames
-    frame_count_++;
-    if (frame_count_ % 150 == 0) {
-      auto end_time = std::chrono::steady_clock::now();
-      double duration_ms = std::chrono::duration<double, std::milli>(end_time - start_time).count();
+    // Log only when subscriber state changes
+    if (left_raw_subs != prev_left_raw_subs_ || left_comp_subs != prev_left_comp_subs_ ||
+        right_raw_subs != prev_right_raw_subs_ || right_comp_subs != prev_right_comp_subs_) {
       RCLCPP_INFO(this->get_logger(),
-        "Processing loop execution time: %.2f ms "
-        "(Subscribers - Stereo Raw/Comp: %zu/%zu, Left: %zu/%zu, Right: %zu/%zu)",
-        duration_ms, stereo_raw_subs, stereo_comp_subs,
+        "Subscribers updated - Left raw: %zu, Left comp: %zu | Right raw: %zu, Right comp: %zu",
         left_raw_subs, left_comp_subs, right_raw_subs, right_comp_subs);
+      prev_left_raw_subs_ = left_raw_subs;
+      prev_left_comp_subs_ = left_comp_subs;
+      prev_right_raw_subs_ = right_raw_subs;
+      prev_right_comp_subs_ = right_comp_subs;
     }
   }
 
@@ -341,8 +341,79 @@ private:
     publisher->publish(info_msg);
   }
 
+  bool is_v4l2_capture_device(int index, std::string & card_name)
+  {
+    std::string dev_path = "/dev/video" + std::to_string(index);
+    int fd = open(dev_path.c_str(), O_RDWR | O_NONBLOCK, 0);
+    if (fd < 0) {
+      return false;
+    }
+    struct v4l2_capability cap;
+    if (ioctl(fd, VIDIOC_QUERYCAP, &cap) < 0) {
+      close(fd);
+      return false;
+    }
+    close(fd);
+
+    uint32_t caps = cap.capabilities;
+    if (caps & V4L2_CAP_DEVICE_CAPS) {
+      caps = cap.device_caps;
+    }
+    if (!(caps & (V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_VIDEO_CAPTURE_MPLANE))) {
+      return false;
+    }
+
+    card_name = reinterpret_cast<const char *>(cap.card);
+    return true;
+  }
+
+  int find_working_camera_device(int preferred_device, bool auto_scan)
+  {
+    std::string card_name;
+    // 1. Attempt preferred device first if index is non-negative
+    if (preferred_device >= 0) {
+      if (is_v4l2_capture_device(preferred_device, card_name)) {
+        if (cap_.open(preferred_device, cv::CAP_V4L2)) {
+          RCLCPP_INFO(this->get_logger(),
+            "Successfully opened preferred camera at /dev/video%d (%s)",
+            preferred_device, card_name.c_str());
+          return preferred_device;
+        }
+      }
+      RCLCPP_WARN(this->get_logger(),
+        "Failed to open preferred camera at /dev/video%d.", preferred_device);
+      if (!auto_scan) {
+        return -1;
+      }
+      RCLCPP_INFO(this->get_logger(), "Starting auto-scan for available video devices (/dev/video0 ~ /dev/video63)...");
+    }
+
+    // 2. Scan available capture devices (/dev/video0 to /dev/video63)
+    for (int dev_idx = 0; dev_idx < 64; ++dev_idx) {
+      if (dev_idx == preferred_device) {
+        continue;
+      }
+      if (!is_v4l2_capture_device(dev_idx, card_name)) {
+        continue;
+      }
+
+      RCLCPP_INFO(this->get_logger(),
+        "Testing V4L2 capture device /dev/video%d (%s)...", dev_idx, card_name.c_str());
+
+      if (cap_.open(dev_idx, cv::CAP_V4L2)) {
+        RCLCPP_INFO(this->get_logger(),
+          "Auto-scan successfully found and opened camera at /dev/video%d (%s)",
+          dev_idx, card_name.c_str());
+        return dev_idx;
+      }
+    }
+
+    return -1;
+  }
+
   // Parameters
   int video_device_;
+  bool auto_detect_device_;
   int width_;
   int height_;
   int fps_;
@@ -350,17 +421,24 @@ private:
   std::string frame_id_;
   int rotation_angle_;
   int jpeg_quality_;
+  int publish_fps_;
+  double publish_interval_ms_{0.0};
 
   int actual_w_{0};
   int actual_h_{0};
   double actual_fps_{0.0};
+  std::chrono::steady_clock::time_point last_publish_time_{};
+
+  // Subscriber state tracking (for change-based logging)
+  size_t prev_left_raw_subs_{0};
+  size_t prev_left_comp_subs_{0};
+  size_t prev_right_raw_subs_{0};
+  size_t prev_right_comp_subs_{0};
 
   // ROS 2 Publishers
-  rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr stereo_pub_;
   rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr left_pub_;
   rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr right_pub_;
 
-  rclcpp::Publisher<sensor_msgs::msg::CompressedImage>::SharedPtr stereo_compressed_pub_;
   rclcpp::Publisher<sensor_msgs::msg::CompressedImage>::SharedPtr left_compressed_pub_;
   rclcpp::Publisher<sensor_msgs::msg::CompressedImage>::SharedPtr right_compressed_pub_;
 
@@ -371,7 +449,6 @@ private:
   cv::VideoCapture cap_;
   std::atomic<bool> running_;
   std::thread capture_thread_;
-  uint64_t frame_count_;
 };
 
 int main(int argc, char ** argv)

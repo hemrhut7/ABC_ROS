@@ -13,3 +13,6 @@
 [submodule "src/INS_python"]
 	path = src/INS_python
 	url = https://github.com/hemrhut7/INS_python.git
+[submodule "src/vins_fusion"]
+	path = src/vins_fusion
+	url = https://github.com/fanhong-li/VINS-Fusion-ROS2-Humble.git
