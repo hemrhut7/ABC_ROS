@@ -35,7 +35,9 @@ public:
     this->declare_parameter<std::string>("frame_id", "camera_link");
     this->declare_parameter<int>("rotation_angle", 180);
     this->declare_parameter<int>("jpeg_quality", 60);
-    this->declare_parameter<int>("publish_fps", 0);  // 0 = same as capture fps (no throttle)
+    this->declare_parameter<std::string>("encoding", "mono8");
+    this->declare_parameter<int>("publish_fps", 0);  // 0 = same as capture fps (no throttle) for raw image
+    this->declare_parameter<int>("compressed_publish_fps", 15);  // Throttle compressed image for remote viewing
 
     // Get parameters
     video_device_ = this->get_parameter("video_device").as_int();
@@ -47,12 +49,28 @@ public:
     frame_id_ = this->get_parameter("frame_id").as_string();
     rotation_angle_ = this->get_parameter("rotation_angle").as_int();
     jpeg_quality_ = this->get_parameter("jpeg_quality").as_int();
+    encoding_ = this->get_parameter("encoding").as_string();
     publish_fps_ = this->get_parameter("publish_fps").as_int();
+    compressed_publish_fps_ = this->get_parameter("compressed_publish_fps").as_int();
+
+    for (auto & c : encoding_) {
+      c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    if (encoding_ != "mono8" && encoding_ != "rgb8" && encoding_ != "bgr8") {
+      RCLCPP_WARN(this->get_logger(), "Unknown encoding '%s', defaulting to 'mono8'", encoding_.c_str());
+      encoding_ = "mono8";
+    }
 
     if (publish_fps_ > 0) {
       publish_interval_ms_ = 1000.0 / publish_fps_;
-      RCLCPP_INFO(this->get_logger(), "Publish rate throttled to %d FPS (interval: %.1f ms)",
+      RCLCPP_INFO(this->get_logger(), "Raw publish rate throttled to %d FPS (interval: %.1f ms)",
         publish_fps_, publish_interval_ms_);
+    }
+
+    if (compressed_publish_fps_ > 0) {
+      compressed_publish_interval_ms_ = 1000.0 / compressed_publish_fps_;
+      RCLCPP_INFO(this->get_logger(), "Compressed publish rate throttled to %d FPS (interval: %.1f ms)",
+        compressed_publish_fps_, compressed_publish_interval_ms_);
     }
 
     // Capitalize fourcc
@@ -68,10 +86,15 @@ public:
       "  Target Format (FOURCC): %s\n"
       "  Frame ID: %s\n"
       "  Rotation Angle: %d\n"
-      "  JPEG Quality: %d",
+      "  JPEG Quality: %d\n"
+      "  Image Encoding: %s\n"
+      "  Raw Publish FPS: %s\n"
+      "  Compressed Publish FPS: %s",
       video_device_, auto_detect_device_ ? "Enabled" : "Disabled",
       width_, height_, fps_, fourcc_.c_str(),
-      frame_id_.c_str(), rotation_angle_, jpeg_quality_);
+      frame_id_.c_str(), rotation_angle_, jpeg_quality_, encoding_.c_str(),
+      publish_fps_ > 0 ? std::to_string(publish_fps_).c_str() : "Full Speed",
+      compressed_publish_fps_ > 0 ? std::to_string(compressed_publish_fps_).c_str() : "Full Speed");
 
     // Initialize publishers
     // RELIABLE: compatible with both RELIABLE and BEST_EFFORT subscribers (RVIZ2 uses RELIABLE)
@@ -193,25 +216,36 @@ private:
   {
     auto start_time = std::chrono::steady_clock::now();
 
-    // Throttle publish rate if publish_fps is set
-    if (publish_fps_ > 0) {
-      double elapsed_ms = std::chrono::duration<double, std::milli>(
-        start_time - last_publish_time_).count();
-      if (elapsed_ms < publish_interval_ms_) {
-        return;
-      }
-      last_publish_time_ = start_time;
-    }
-
     size_t left_raw_subs = left_pub_->get_subscription_count();
     size_t left_comp_subs = left_compressed_pub_->get_subscription_count();
     size_t right_raw_subs = right_pub_->get_subscription_count();
     size_t right_comp_subs = right_compressed_pub_->get_subscription_count();
 
-    bool any_left = (left_raw_subs > 0) || (left_comp_subs > 0);
-    bool any_right = (right_raw_subs > 0) || (right_comp_subs > 0);
+    // Check if raw needs to be published (considering raw publish_fps throttling)
+    bool should_publish_raw = (left_raw_subs > 0 || right_raw_subs > 0);
+    if (should_publish_raw && publish_fps_ > 0) {
+      double elapsed_raw_ms = std::chrono::duration<double, std::milli>(
+        start_time - last_publish_time_).count();
+      if (elapsed_raw_ms < publish_interval_ms_) {
+        should_publish_raw = false;
+      } else {
+        last_publish_time_ = start_time;
+      }
+    }
 
-    if (!any_left && !any_right) {
+    // Check if compressed needs to be published (considering compressed_publish_fps throttling)
+    bool should_publish_comp = (left_comp_subs > 0 || right_comp_subs > 0);
+    if (should_publish_comp && compressed_publish_fps_ > 0) {
+      double elapsed_comp_ms = std::chrono::duration<double, std::milli>(
+        start_time - last_compressed_publish_time_).count();
+      if (elapsed_comp_ms < compressed_publish_interval_ms_) {
+        should_publish_comp = false;
+      } else {
+        last_compressed_publish_time_ = start_time;
+      }
+    }
+
+    if (!should_publish_raw && !should_publish_comp) {
       return;
     }
 
@@ -225,76 +259,98 @@ private:
 
     rclcpp::Time timestamp = this->get_clock()->now();
 
-
     // Split left and right images
-    if (any_left || any_right) {
-      int h = frame.rows;
-      int w = frame.cols;
-      int half_w = w / 2;
+    int h = frame.rows;
+    int w = frame.cols;
+    int half_w = w / 2;
 
-      cv::Mat left_frame = any_left ? frame(cv::Rect(0, 0, half_w, h)) : cv::Mat();
-      cv::Mat right_frame = any_right ? frame(cv::Rect(half_w, 0, half_w, h)) : cv::Mat();
+    bool handle_left = (should_publish_raw && left_raw_subs > 0) || (should_publish_comp && left_comp_subs > 0);
+    bool handle_right = (should_publish_raw && right_raw_subs > 0) || (should_publish_comp && right_comp_subs > 0);
 
-      // Left Frame
-      if (any_left && !left_frame.empty()) {
-        try {
-          std_msgs::msg::Header left_header;
-          left_header.stamp = timestamp;
-          left_header.frame_id = "left_" + frame_id_;
+    cv::Mat left_frame = handle_left ? frame(cv::Rect(0, 0, half_w, h)) : cv::Mat();
+    cv::Mat right_frame = handle_right ? frame(cv::Rect(half_w, 0, half_w, h)) : cv::Mat();
 
-          if (left_raw_subs > 0) {
-            sensor_msgs::msg::Image::SharedPtr left_msg =
-              cv_bridge::CvImage(left_header, "bgr8", left_frame).toImageMsg();
-            left_pub_->publish(*left_msg);
-          }
-
-          if (left_comp_subs > 0) {
-            std::vector<uchar> buf;
-            std::vector<int> params = {cv::IMWRITE_JPEG_QUALITY, jpeg_quality_};
-            if (cv::imencode(".jpg", left_frame, buf, params)) {
-              sensor_msgs::msg::CompressedImage comp_msg;
-              comp_msg.header = left_header;
-              comp_msg.format = "jpeg";
-              comp_msg.data = buf;
-              left_compressed_pub_->publish(comp_msg);
-            }
-          }
-
-          publish_camera_info(left_info_pub_, left_header, half_w, h);
-        } catch (const std::exception & e) {
-          RCLCPP_ERROR(this->get_logger(), "Error publishing left image: %s", e.what());
-        }
+    // Convert encoding if necessary
+    cv::Mat left_processed, right_processed;
+    if (handle_left && !left_frame.empty()) {
+      if (encoding_ == "mono8") {
+        cv::cvtColor(left_frame, left_processed, cv::COLOR_BGR2GRAY);
+      } else if (encoding_ == "rgb8") {
+        cv::cvtColor(left_frame, left_processed, cv::COLOR_BGR2RGB);
+      } else {
+        left_processed = left_frame;
       }
+    }
 
-      // Right Frame
-      if (any_right && !right_frame.empty()) {
-        try {
-          std_msgs::msg::Header right_header;
-          right_header.stamp = timestamp;
-          right_header.frame_id = "right_" + frame_id_;
+    if (handle_right && !right_frame.empty()) {
+      if (encoding_ == "mono8") {
+        cv::cvtColor(right_frame, right_processed, cv::COLOR_BGR2GRAY);
+      } else if (encoding_ == "rgb8") {
+        cv::cvtColor(right_frame, right_processed, cv::COLOR_BGR2RGB);
+      } else {
+        right_processed = right_frame;
+      }
+    }
 
-          if (right_raw_subs > 0) {
-            sensor_msgs::msg::Image::SharedPtr right_msg =
-              cv_bridge::CvImage(right_header, "bgr8", right_frame).toImageMsg();
-            right_pub_->publish(*right_msg);
-          }
+    // Left Frame
+    if (handle_left && !left_processed.empty()) {
+      try {
+        std_msgs::msg::Header left_header;
+        left_header.stamp = timestamp;
+        left_header.frame_id = "left_camera_optical_frame";
 
-          if (right_comp_subs > 0) {
-            std::vector<uchar> buf;
-            std::vector<int> params = {cv::IMWRITE_JPEG_QUALITY, jpeg_quality_};
-            if (cv::imencode(".jpg", right_frame, buf, params)) {
-              sensor_msgs::msg::CompressedImage comp_msg;
-              comp_msg.header = right_header;
-              comp_msg.format = "jpeg";
-              comp_msg.data = buf;
-              right_compressed_pub_->publish(comp_msg);
-            }
-          }
-
-          publish_camera_info(right_info_pub_, right_header, half_w, h);
-        } catch (const std::exception & e) {
-          RCLCPP_ERROR(this->get_logger(), "Error publishing right image: %s", e.what());
+        if (should_publish_raw && left_raw_subs > 0) {
+          sensor_msgs::msg::Image::SharedPtr left_msg =
+            cv_bridge::CvImage(left_header, encoding_, left_processed).toImageMsg();
+          left_pub_->publish(*left_msg);
         }
+
+        if (should_publish_comp && left_comp_subs > 0) {
+          std::vector<uchar> buf;
+          std::vector<int> params = {cv::IMWRITE_JPEG_QUALITY, jpeg_quality_};
+          if (cv::imencode(".jpg", left_processed, buf, params)) {
+            sensor_msgs::msg::CompressedImage comp_msg;
+            comp_msg.header = left_header;
+            comp_msg.format = "jpeg";
+            comp_msg.data = buf;
+            left_compressed_pub_->publish(comp_msg);
+          }
+        }
+
+        publish_camera_info(left_info_pub_, left_header, true, half_w, h);
+      } catch (const std::exception & e) {
+        RCLCPP_ERROR(this->get_logger(), "Error publishing left image: %s", e.what());
+      }
+    }
+
+    // Right Frame
+    if (handle_right && !right_processed.empty()) {
+      try {
+        std_msgs::msg::Header right_header;
+        right_header.stamp = timestamp;
+        right_header.frame_id = "right_camera_optical_frame";
+
+        if (should_publish_raw && right_raw_subs > 0) {
+          sensor_msgs::msg::Image::SharedPtr right_msg =
+            cv_bridge::CvImage(right_header, encoding_, right_processed).toImageMsg();
+          right_pub_->publish(*right_msg);
+        }
+
+        if (should_publish_comp && right_comp_subs > 0) {
+          std::vector<uchar> buf;
+          std::vector<int> params = {cv::IMWRITE_JPEG_QUALITY, jpeg_quality_};
+          if (cv::imencode(".jpg", right_processed, buf, params)) {
+            sensor_msgs::msg::CompressedImage comp_msg;
+            comp_msg.header = right_header;
+            comp_msg.format = "jpeg";
+            comp_msg.data = buf;
+            right_compressed_pub_->publish(comp_msg);
+          }
+        }
+
+        publish_camera_info(right_info_pub_, right_header, false, half_w, h);
+      } catch (const std::exception & e) {
+        RCLCPP_ERROR(this->get_logger(), "Error publishing right image: %s", e.what());
       }
     }
 
@@ -314,6 +370,7 @@ private:
   void publish_camera_info(
     const rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr & publisher,
     const std_msgs::msg::Header & header,
+    bool is_left,
     int width,
     int height)
   {
@@ -322,22 +379,44 @@ private:
     info_msg.width = width;
     info_msg.height = height;
     info_msg.distortion_model = "plumb_bob";
-    info_msg.d = {0.0, 0.0, 0.0, 0.0, 0.0};
-    info_msg.k = {
-      1.0, 0.0, static_cast<double>(width / 2.0),
-      0.0, 1.0, static_cast<double>(height / 2.0),
-      0.0, 0.0, 1.0
-    };
-    info_msg.r = {
-      1.0, 0.0, 0.0,
-      0.0, 1.0, 0.0,
-      0.0, 0.0, 1.0
-    };
-    info_msg.p = {
-      1.0, 0.0, static_cast<double>(width / 2.0), 0.0,
-      0.0, 1.0, static_cast<double>(height / 2.0), 0.0,
-      0.0, 0.0, 1.0, 0.0
-    };
+
+    if (is_left) {
+      // Left Camera (cam0) calibration
+      info_msg.d = {0.17890018023870716, -0.20487403855793998, -0.001494892594896869, 0.00011300776298145689, 0.0};
+      info_msg.k = {
+        642.3066735043554, 0.0, 307.39468172973955,
+        0.0, 639.1076963871467, 232.5087613689875,
+        0.0, 0.0, 1.0
+      };
+      info_msg.r = {
+        1.0, 0.0, 0.0,
+        0.0, 1.0, 0.0,
+        0.0, 0.0, 1.0
+      };
+      info_msg.p = {
+        642.3066735043554, 0.0, 307.39468172973955, 0.0,
+        0.0, 639.1076963871467, 232.5087613689875, 0.0,
+        0.0, 0.0, 1.0, 0.0
+      };
+    } else {
+      // Right Camera (cam1) calibration (Baseline from Kalibr: 51.912mm = 0.05191207112027276m)
+      info_msg.d = {0.18277211689305964, -0.22449649871119265, 0.0019745518498334538, 0.0004427002638666012, 0.0};
+      info_msg.k = {
+        644.2906010514704, 0.0, 340.17904501005484,
+        0.0, 640.7801151585047, 245.5372357813793,
+        0.0, 0.0, 1.0
+      };
+      info_msg.r = {
+        1.0, 0.0, 0.0,
+        0.0, 1.0, 0.0,
+        0.0, 0.0, 1.0
+      };
+      info_msg.p = {
+        644.2906010514704, 0.0, 340.17904501005484, -644.2906010514704 * 0.05191207112027276,
+        0.0, 640.7801151585047, 245.5372357813793, 0.0,
+        0.0, 0.0, 1.0, 0.0
+      };
+    }
     publisher->publish(info_msg);
   }
 
@@ -421,13 +500,18 @@ private:
   std::string frame_id_;
   int rotation_angle_;
   int jpeg_quality_;
+  std::string encoding_;
   int publish_fps_;
   double publish_interval_ms_{0.0};
+  std::chrono::steady_clock::time_point last_publish_time_{};
+
+  int compressed_publish_fps_;
+  double compressed_publish_interval_ms_{0.0};
+  std::chrono::steady_clock::time_point last_compressed_publish_time_{};
 
   int actual_w_{0};
   int actual_h_{0};
   double actual_fps_{0.0};
-  std::chrono::steady_clock::time_point last_publish_time_{};
 
   // Subscriber state tracking (for change-based logging)
   size_t prev_left_raw_subs_{0};

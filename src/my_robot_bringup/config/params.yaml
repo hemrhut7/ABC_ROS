@@ -9,14 +9,16 @@ image_splitter_node:
     frame_id: "camera_link"
     rotation_angle: 180
     jpeg_quality: 60
-    publish_fps: 15  # Throttle publish rate for remote viewing (0 = no throttle, use capture fps)
+    encoding: "mono8"
+    publish_fps: 0              # Raw image publish rate (0 = full capture fps, e.g. 60 FPS for SLAM)
+    compressed_publish_fps: 15  # Compressed JPEG image publish rate for remote viewing / RViz
 
 esp32_serial_node:
   ros__parameters: {}
 
 data_logger_node:
   ros__parameters:
-    auto_log: true
+    auto_log: false
     mode: "lidar" # Options: esp32, lidar, camera, total
     record_output_dir: "ros2_bag"
 

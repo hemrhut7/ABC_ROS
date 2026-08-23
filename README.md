@@ -162,7 +162,8 @@ docker run -it --rm --runtime nvidia \
   -v /dev:/dev \
   -v ~/ROS_ABC:/workspace \
   -v /opt/nvidia/vpi3:/opt/nvidia/vpi3 \
-  -v /usr/lib/cmake/vpi3:/usr/lib/cmake/vpi3 \
+  -e CMAKE_PREFIX_PATH=/opt/ros/humble:/opt/nvidia/vpi3/lib/aarch64-linux-gnu/cmake/vpi \
+  -e vpi_DIR=/opt/nvidia/vpi3/lib/aarch64-linux-gnu/cmake/vpi \
   ros:humble-ros-base-hank bash
 ```
 
