@@ -27,9 +27,9 @@ venv/
 # Agent settings & scratchpad
 .agents/
 .agent_scratchpad/
-**/_agent*/
-**/.agents/
-**/.agent_scratchpad/
-scratch/
+
+# Third-party external repositories managed by .repos
+/src/isaac_ros/
+
 
 
