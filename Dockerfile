@@ -10,13 +10,26 @@ ENV DEBIAN_FRONTEND=noninteractive
 # 1. Install System Dependencies & ROS 2 Packages
 RUN apt-get update && apt-get install -y \
     python3-pip \
+    python3-posix-ipc \
     libtbb-dev \
     ros-humble-cv-bridge \
     ros-humble-tf2-ros \
     ros-humble-sensor-msgs \
     ros-humble-nav-msgs \
     ros-humble-geometry-msgs \
+    ros-humble-stereo-msgs \
+    ros-humble-visualization-msgs \
+    ros-humble-image-transport \
+    ros-humble-camera-info-manager \
+    ros-humble-diagnostic-updater \
     ros-humble-cartographer-ros \
+    ros-humble-magic-enum \
+    ros-humble-rviz-common \
+    ros-humble-rviz-ogre-vendor \
+    ros-humble-rviz-rendering \
+    ros-humble-nav2-costmap-2d \
+    ros-humble-pcl-conversions \
+    ros-humble-pcl-ros \
     && rm -rf /var/lib/apt/lists/*
 
 # 2. Fix TBB Dynamic Library Symlink for OpenCV TBB 2020 compatibility
