@@ -9,7 +9,7 @@ image_splitter_node:
     frame_id: "camera_link"
     rotation_angle: 180
     jpeg_quality: 60
-    encoding: "mono8"
+    encoding: "bgr8"
     publish_fps: 0              # Raw image publish rate (0 = full capture fps, e.g. 60 FPS for SLAM)
     compressed_publish_fps: 15  # Compressed JPEG image publish rate for remote viewing / RViz
 
