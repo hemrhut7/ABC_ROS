@@ -16,7 +16,7 @@ def generate_launch_description():
 
     auto_log_arg = DeclareLaunchArgument(
         'auto_log',
-        default_value='true',
+        default_value='false',
         description='Enable or disable automatic rosbag recording (true/false or enable/disable).'
     )
 
