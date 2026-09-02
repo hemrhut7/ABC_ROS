@@ -128,6 +128,8 @@ private:
     std::vector<std::string> camera_topics = {
       "/camera/left/image_raw",
       "/camera/right/image_raw",
+      "/camera/left/image_mono",
+      "/camera/right/image_mono",
       "/camera/left/camera_info",
       "/camera/right/camera_info"
     };

@@ -1,5 +1,7 @@
 image_splitter_node:
   ros__parameters:
+    use_hardware_decode: true
+    hw_decoder_type: "jpegdec"  # Options: "jpegdec" (Recommended: 70+ FPS with Jetson VIC HW 180 flip), "nvv4l2decoder", "nvjpegdec"
     video_device: 0
     auto_detect_device: true
     width: 1280
@@ -7,11 +9,17 @@ image_splitter_node:
     fps: 60
     fourcc: "MJPG"
     frame_id: "camera_link"
-    rotation_angle: 180
+    rotation_angle: 180           # 0, 90, 180, 270 (hardware rotated via nvvidconv flip-method=2)
+    publish_bgr: true
+    publish_mono: true
+    publish_compressed: true
+    bgr_publish_fps: 15           # BGR8 image stream throttled to 15 Hz for AI/object detection
+    mono_publish_fps: 0           # Mono8 image stream at full speed (0 = 60 Hz) for cuVSLAM/VIO
+    compressed_publish_fps: 15    # Compressed JPEG stream throttled to 15 Hz for RViz/remote viewing
+    enable_mono_filter: true      # Gaussian filter on mono8 to remove MJPEG compression artifacts
+    mono_filter_ksize: 3
+    mono_filter_sigma: 0.5
     jpeg_quality: 60
-    encoding: "bgr8"            # bgr8 for VINS:fusion, mono8 for isaac cuVSLAM
-    publish_fps: 0              # Raw image publish rate (0 = full capture fps, e.g. 60 FPS for SLAM)
-    compressed_publish_fps: 15  # Compressed JPEG image publish rate for remote viewing / RViz
 
 esp32_serial_node:
   ros__parameters: {}

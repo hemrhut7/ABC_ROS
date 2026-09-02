@@ -37,4 +37,20 @@
     <child link="right_camera_link" />
     <origin xyz="0 -0.02875 0" rpy="0 0 0" />
   </joint>
+
+  <!-- Standard ROS Optical Frames (z forward, x right, y down) -->
+  <link name="left_camera_optical_frame" />
+  <link name="right_camera_optical_frame" />
+
+  <joint name="left_camera_optical_joint" type="fixed">
+    <parent link="left_camera_link" />
+    <child link="left_camera_optical_frame" />
+    <origin xyz="0 0 0" rpy="-1.5707963267948966 0 -1.5707963267948966" />
+  </joint>
+
+  <joint name="right_camera_optical_joint" type="fixed">
+    <parent link="right_camera_link" />
+    <child link="right_camera_optical_frame" />
+    <origin xyz="0 0 0" rpy="-1.5707963267948966 0 -1.5707963267948966" />
+  </joint>
 </robot>
