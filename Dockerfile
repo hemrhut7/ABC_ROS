@@ -14,6 +14,9 @@ RUN apt-get update && apt-get install -y \
     libtbb-dev \
     python3-pip \
     python3-posix-ipc \
+    gstreamer1.0-tools \
+    gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-bad \
     ros-humble-cv-bridge \
     ros-humble-tf2-ros \
     ros-humble-sensor-msgs \

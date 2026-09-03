@@ -346,3 +346,7 @@ sudo nvpmodel -m 0
 ```
 sudo chown -R hank:hank ros2_bag/
 ```
+
+```
+rviz2 -d src/my_robot_bringup/rviz/vins_fusion.rviz 
+```

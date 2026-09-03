@@ -24,7 +24,7 @@ public:
     // Handle auto_log as string or bool using dynamic typing
     rcl_interfaces::msg::ParameterDescriptor auto_log_desc;
     auto_log_desc.dynamic_typing = true;
-    this->declare_parameter("auto_log", rclcpp::ParameterValue(true), auto_log_desc);
+    this->declare_parameter("auto_log", rclcpp::ParameterValue(false), auto_log_desc);
     this->declare_parameter<std::string>("mode", "total");
     this->declare_parameter<std::string>("record_output_dir", "ros2_bag");
     this->declare_parameter<std::vector<std::string>>("record_topics", std::vector<std::string>{});
@@ -38,10 +38,10 @@ public:
         std::transform(auto_log_str.begin(), auto_log_str.end(), auto_log_str.begin(), ::tolower);
         auto_log_enabled_ = (auto_log_str == "true" || auto_log_str == "enable" || auto_log_str == "enabled" || auto_log_str == "1" || auto_log_str == "on");
       } else {
-        auto_log_enabled_ = true;
+        auto_log_enabled_ = false;
       }
     } catch (...) {
-      auto_log_enabled_ = true;
+      auto_log_enabled_ = false;
     }
 
     mode_ = this->get_parameter("mode").as_string();
@@ -128,6 +128,8 @@ private:
     std::vector<std::string> camera_topics = {
       "/camera/left/image_raw",
       "/camera/right/image_raw",
+      "/camera/left/image_mono",
+      "/camera/right/image_mono",
       "/camera/left/camera_info",
       "/camera/right/camera_info"
     };
