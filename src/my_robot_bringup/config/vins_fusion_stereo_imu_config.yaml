@@ -13,8 +13,8 @@ imu: 1
 num_of_cam: 2
 
 imu_topic: "/imu/data_raw"
-image0_topic: "/camera/left/image_raw"
-image1_topic: "/camera/right/image_raw"
+image0_topic: "/camera/left/image_mono"
+image1_topic: "/camera/right/image_mono"
 output_path: "./output/"
 
 cam0_calib: "cam0_pinhole.yaml"
@@ -34,25 +34,25 @@ use_gpu_ceres: 0
 estimate_extrinsic: 0
 
 # Transformation from IMU body frame to Camera frame
-# 來源: Kalibr calibration (rosbag_total_20260811_163132)
+# 來源: Kalibr calibration (kalibr_mono_20260902_222614)
 # body_T_cam = inv(T_cam_imu)  — T_cam_imu from camchain-imucam.yaml
 body_T_cam0: !!opencv-matrix
    rows: 4
    cols: 4
    dt: d
-   data: [ 0.021103513585374212,  0.007418891625507792,  0.9997497695730665,   0.044798169991720975,
-          -0.999777293526675,     8.543211451197283e-05, 0.02110346061264885,  0.04287807789706624,
-           7.115355041089461e-05, -0.9999724759954153,   0.007419042308107123, 0.0924990175300848,
-           0.0, 0.0, 0.0, 1.0]
+   data: [ 0.02796172,  0.00194742,  0.99960710,  0.04374691,
+          -0.99959602,  0.00514903,  0.02795138,  0.04212023,
+          -0.00509258, -0.99998485,  0.00209061,  0.09675078,
+           0.0,         0.0,         0.0,         1.0 ]
 
 body_T_cam1: !!opencv-matrix
    rows: 4
    cols: 4
    dt: d
-   data: [ 0.00787773737128727,  -0.0004982021163341821, 0.9999688460389955,   0.046132562087697795,
-          -0.999968948908393,     0.0002021712138430194, 0.007877838906955205, -0.009025056039920822,
-          -0.00020608967142444494, -0.9999998554607152,  -0.0004965939948879807, 0.09232025180364296,
-           0.0, 0.0, 0.0, 1.0]
+   data: [ 0.01473626, -0.00597031,  0.99987359,  0.04543634,
+          -0.99987737,  0.00521138,  0.01476743, -0.00977094,
+          -0.00529888, -0.99996860, -0.00589279,  0.09630265,
+           0.0,         0.0,         0.0,         1.0 ]
 
 # Multiple thread support
 multiple_thread: 4
@@ -79,10 +79,10 @@ gyr_w: 0.00010            # 陀螺儀零偏隨機遊走 (rad/s^2 / sqrt(Hz))
 g_norm: 9.81007           # gravity magnitude
 
 # ======================== Time Offset ========================
-# 來源: Kalibr camchain-imucam (timeshift_cam_imu: -0.02904955804098852)
-# td 定義: image_clock + td = imu_clock
-estimate_td: 1                      # online estimate time offset between camera and imu
-td: -0.029                          # initial value of time offset (s), from Kalibr calibration
+# 來源: Kalibr camchain-imucam (timeshift_cam_imu: -0.03301s)
+# 附註: 相機驅動層 (image_splitter_node) 已啟用 timestamp_offset_ms: 33.0 自動回推，此處設為 0.0
+estimate_td: 0                      # online estimate time offset between camera and imu
+td: 0.0                             # initial value of time offset (s)
 
 # ======================== Loop Closure ========================
 loop_closure: 1          # 1 to enable loop closure (建議在 Jetson 上先關閉以節省運算)

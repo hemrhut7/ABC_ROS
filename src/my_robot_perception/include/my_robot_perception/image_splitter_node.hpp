@@ -51,6 +51,8 @@ private:
   std::string frame_id_{"camera_link"};
   std::string left_frame_id_{"left_camera_optical_frame"};
   std::string right_frame_id_{"right_camera_optical_frame"};
+  double timestamp_offset_ms_{33.0};
+  int64_t timestamp_offset_ns_{33000000};
   int rotation_angle_{180};
   int jpeg_quality_{60};
 
@@ -101,6 +103,11 @@ private:
 
   rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr left_info_pub_;
   rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr right_info_pub_;
+
+  // Pre-allocated static CameraInfo messages for Zero-Allocation publishing
+  sensor_msgs::msg::CameraInfo left_info_msg_;
+  sensor_msgs::msg::CameraInfo right_info_msg_;
+  void init_camera_info();
 
   // OpenCV & Threading
   cv::VideoCapture cap_;

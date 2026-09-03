@@ -60,6 +60,7 @@ ImageSplitterNode::ImageSplitterNode(const rclcpp::NodeOptions & options)
   this->declare_parameter<std::string>("frame_id", "camera_link");
   this->declare_parameter<std::string>("left_frame_id", "left_camera_optical_frame");
   this->declare_parameter<std::string>("right_frame_id", "right_camera_optical_frame");
+  this->declare_parameter<double>("timestamp_offset_ms", 33.0);
   this->declare_parameter<int>("rotation_angle", 180);
   this->declare_parameter<int>("jpeg_quality", 60);
 
@@ -87,6 +88,8 @@ ImageSplitterNode::ImageSplitterNode(const rclcpp::NodeOptions & options)
   frame_id_ = this->get_parameter("frame_id").as_string();
   left_frame_id_ = this->get_parameter("left_frame_id").as_string();
   right_frame_id_ = this->get_parameter("right_frame_id").as_string();
+  timestamp_offset_ms_ = this->get_parameter("timestamp_offset_ms").as_double();
+  timestamp_offset_ns_ = static_cast<int64_t>(timestamp_offset_ms_ * 1e6);
   rotation_angle_ = this->get_parameter("rotation_angle").as_int();
   jpeg_quality_ = this->get_parameter("jpeg_quality").as_int();
 
@@ -128,6 +131,7 @@ ImageSplitterNode::ImageSplitterNode(const rclcpp::NodeOptions & options)
     "  Preferred Device: /dev/video%d (Auto Scan: %s)\n"
     "  Target Resolution: %dx%d @ %d FPS (FOURCC: %s)\n"
     "  Rotation Angle: %d deg\n"
+    "  HW Latency Compensation: %.1f ms (Timestamp rolled back to exposure epoch)\n"
     "  Streams Config:\n"
     "    - BGR8 Stream: %s (Rate: %s)\n"
     "    - Mono8 Stream: %s (Rate: %s, Gaussian Filter: %s [k=%d, s=%.2f])\n"
@@ -138,6 +142,7 @@ ImageSplitterNode::ImageSplitterNode(const rclcpp::NodeOptions & options)
     video_device_, auto_detect_device_ ? "Enabled" : "Disabled",
     width_, height_, fps_, fourcc_.c_str(),
     rotation_angle_,
+    timestamp_offset_ms_,
     publish_bgr_ ? "Enabled" : "Disabled",
     bgr_publish_fps_ > 0 ? (std::to_string(bgr_publish_fps_) + " Hz").c_str() : "Full Speed (60 Hz)",
     publish_mono_ ? "Enabled" : "Disabled",
@@ -170,6 +175,9 @@ ImageSplitterNode::ImageSplitterNode(const rclcpp::NodeOptions & options)
 
   left_info_pub_ = this->create_publisher<sensor_msgs::msg::CameraInfo>("camera/left/camera_info", sensor_qos);
   right_info_pub_ = this->create_publisher<sensor_msgs::msg::CameraInfo>("camera/right/camera_info", sensor_qos);
+
+  // Initialize static CameraInfo message buffers for Zero-Allocation publishing
+  init_camera_info();
 
   // Open camera
   int active_device = open_camera(video_device_, auto_detect_device_);
@@ -211,34 +219,34 @@ std::string ImageSplitterNode::build_gstreamer_pipeline(
 
   std::ostringstream ss;
   if (decoder_type == "nvv4l2decoder") {
-    ss << "v4l2src device=/dev/video" << dev_idx
+    ss << "v4l2src device=/dev/video" << dev_idx << " do-timestamp=true"
        << " ! image/jpeg, width=" << w << ", height=" << h << ", framerate=" << fps_val << "/1"
        << " ! jpegparse ! nvv4l2decoder mjpeg=1 ! video/x-raw(memory:NVMM)"
        << " ! nvvidconv flip-method=" << flip_method
        << " ! video/x-raw, format=BGRx"
        << " ! videoconvert"
        << " ! video/x-raw, format=BGR"
-       << " ! appsink drop=1 max-buffers=2";
+       << " ! appsink drop=1 max-buffers=1 sync=false";
   } else if (decoder_type == "nvjpegdec") {
-    ss << "v4l2src device=/dev/video" << dev_idx
+    ss << "v4l2src device=/dev/video" << dev_idx << " do-timestamp=true"
        << " ! image/jpeg, width=" << w << ", height=" << h << ", framerate=" << fps_val << "/1"
        << " ! jpegparse ! nvjpegdec ! video/x-raw(memory:NVMM)"
        << " ! nvvidconv flip-method=" << flip_method
        << " ! video/x-raw, format=BGRx"
        << " ! videoconvert"
        << " ! video/x-raw, format=BGR"
-       << " ! appsink drop=1 max-buffers=2";
+       << " ! appsink drop=1 max-buffers=1 sync=false";
   } else {
-    // Default & reliable pipeline for USB UVC MJPEG on Jetson Orin Nano:
-    // SIMD multi-threaded JPEG decode + Jetson VIC (nvvidconv) for 180 flip & colorspace conversion
-    ss << "v4l2src device=/dev/video" << dev_idx
+    // Default & reliable low-latency pipeline for USB UVC MJPEG on Jetson Orin Nano:
+    // Zero-buffering appsink (max-buffers=1, drop=true, sync=false) + Hardware VIC 180 flip
+    ss << "v4l2src device=/dev/video" << dev_idx << " do-timestamp=true"
        << " ! image/jpeg, width=" << w << ", height=" << h << ", framerate=" << fps_val << "/1"
        << " ! jpegdec"
        << " ! nvvidconv flip-method=" << flip_method
        << " ! video/x-raw, format=BGRx"
        << " ! videoconvert"
        << " ! video/x-raw, format=BGR"
-       << " ! appsink drop=1 max-buffers=2";
+       << " ! appsink drop=1 max-buffers=1 sync=false";
   }
 
   return ss.str();
@@ -461,8 +469,11 @@ void ImageSplitterNode::process_and_publish_frame(cv::Mat & frame)
     }
   }
 
-  // Unified precise timestamp for all outputs in this frame
-  rclcpp::Time timestamp = this->get_clock()->now();
+  // Unified precise timestamp for all outputs in this frame (compensated for hardware USB transfer & decoding latency)
+  rclcpp::Time raw_now = this->get_clock()->now();
+  rclcpp::Time timestamp = (timestamp_offset_ns_ != 0) ?
+    (raw_now - rclcpp::Duration::from_nanoseconds(timestamp_offset_ns_)) :
+    raw_now;
 
   int h = frame.rows;
   int w = frame.cols;
@@ -565,6 +576,54 @@ void ImageSplitterNode::process_and_publish_frame(cv::Mat & frame)
   }
 }
 
+void ImageSplitterNode::init_camera_info()
+{
+  int half_w = width_ / 2;
+  int h = height_;
+
+  // Left Camera (cam0) calibration
+  left_info_msg_.width = half_w;
+  left_info_msg_.height = h;
+  left_info_msg_.distortion_model = "plumb_bob";
+  left_info_msg_.d = {0.17890018023870716, -0.20487403855793998, -0.001494892594896869, 0.00011300776298145689, 0.0};
+  left_info_msg_.k = {
+    642.3066735043554, 0.0, 307.39468172973955,
+    0.0, 639.1076963871467, 232.5087613689875,
+    0.0, 0.0, 1.0
+  };
+  left_info_msg_.r = {
+    1.0, 0.0, 0.0,
+    0.0, 1.0, 0.0,
+    0.0, 0.0, 1.0
+  };
+  left_info_msg_.p = {
+    642.3066735043554, 0.0, 307.39468172973955, 0.0,
+    0.0, 639.1076963871467, 232.5087613689875, 0.0,
+    0.0, 0.0, 1.0, 0.0
+  };
+
+  // Right Camera (cam1) calibration (Baseline from Kalibr: 51.912mm = 0.05191207112027276m)
+  right_info_msg_.width = half_w;
+  right_info_msg_.height = h;
+  right_info_msg_.distortion_model = "plumb_bob";
+  right_info_msg_.d = {0.18277211689305964, -0.22449649871119265, 0.0019745518498334538, 0.0004427002638666012, 0.0};
+  right_info_msg_.k = {
+    644.2906010514704, 0.0, 340.17904501005484,
+    0.0, 640.7801151585047, 245.5372357813793,
+    0.0, 0.0, 1.0
+  };
+  right_info_msg_.r = {
+    1.0, 0.0, 0.0,
+    0.0, 1.0, 0.0,
+    0.0, 0.0, 1.0
+  };
+  right_info_msg_.p = {
+    644.2906010514704, 0.0, 340.17904501005484, -644.2906010514704 * 0.05191207112027276,
+    0.0, 640.7801151585047, 245.5372357813793, 0.0,
+    0.0, 0.0, 1.0, 0.0
+  };
+}
+
 void ImageSplitterNode::publish_camera_info(
   const rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr & publisher,
   const std_msgs::msg::Header & header,
@@ -572,49 +631,10 @@ void ImageSplitterNode::publish_camera_info(
   int width,
   int height)
 {
-  sensor_msgs::msg::CameraInfo info_msg;
+  (void)width;
+  (void)height;
+  auto & info_msg = is_left ? left_info_msg_ : right_info_msg_;
   info_msg.header = header;
-  info_msg.width = width;
-  info_msg.height = height;
-  info_msg.distortion_model = "plumb_bob";
-
-  if (is_left) {
-    // Left Camera (cam0) calibration
-    info_msg.d = {0.17890018023870716, -0.20487403855793998, -0.001494892594896869, 0.00011300776298145689, 0.0};
-    info_msg.k = {
-      642.3066735043554, 0.0, 307.39468172973955,
-      0.0, 639.1076963871467, 232.5087613689875,
-      0.0, 0.0, 1.0
-    };
-    info_msg.r = {
-      1.0, 0.0, 0.0,
-      0.0, 1.0, 0.0,
-      0.0, 0.0, 1.0
-    };
-    info_msg.p = {
-      642.3066735043554, 0.0, 307.39468172973955, 0.0,
-      0.0, 639.1076963871467, 232.5087613689875, 0.0,
-      0.0, 0.0, 1.0, 0.0
-    };
-  } else {
-    // Right Camera (cam1) calibration (Baseline from Kalibr: 51.912mm = 0.05191207112027276m)
-    info_msg.d = {0.18277211689305964, -0.22449649871119265, 0.0019745518498334538, 0.0004427002638666012, 0.0};
-    info_msg.k = {
-      644.2906010514704, 0.0, 340.17904501005484,
-      0.0, 640.7801151585047, 245.5372357813793,
-      0.0, 0.0, 1.0
-    };
-    info_msg.r = {
-      1.0, 0.0, 0.0,
-      0.0, 1.0, 0.0,
-      0.0, 0.0, 1.0
-    };
-    info_msg.p = {
-      644.2906010514704, 0.0, 340.17904501005484, -644.2906010514704 * 0.05191207112027276,
-      0.0, 640.7801151585047, 245.5372357813793, 0.0,
-      0.0, 0.0, 1.0, 0.0
-    };
-  }
   publisher->publish(info_msg);
 }
 

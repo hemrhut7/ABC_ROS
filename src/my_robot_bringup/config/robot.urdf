@@ -29,13 +29,13 @@
   <joint name="left_camera_joint" type="fixed">
     <parent link="camera_link" />
     <child link="left_camera_link" />
-    <origin xyz="0 0.02875 0" rpy="0 0 0" />
+    <origin xyz="0 0.025956 0" rpy="0 0 0" />
   </joint>
 
   <joint name="right_camera_joint" type="fixed">
     <parent link="camera_link" />
     <child link="right_camera_link" />
-    <origin xyz="0 -0.02875 0" rpy="0 0 0" />
+    <origin xyz="0 -0.025956 0" rpy="0 0 0" />
   </joint>
 
   <!-- Standard ROS Optical Frames (z forward, x right, y down) -->
