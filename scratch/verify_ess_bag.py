@@ -4,6 +4,9 @@ from stereo_msgs.msg import DisparityImage
 from sensor_msgs.msg import Image, PointCloud2
 import numpy as np
 import time
+import signal
+import sys
+
 
 class ESSVerifier(Node):
     def __init__(self):
@@ -81,9 +84,22 @@ class ESSVerifier(Node):
 def main():
     rclpy.init()
     node = ESSVerifier()
+
+    def handle_exit(signum, frame):
+        node.report()
+        try:
+            node.destroy_node()
+            rclpy.shutdown()
+        except:
+            pass
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, handle_exit)
+    signal.signal(signal.SIGINT, handle_exit)
+
     try:
         rclpy.spin(node)
-    except:
+    except (KeyboardInterrupt, SystemExit):
         pass
     finally:
         node.report()
@@ -92,6 +108,7 @@ def main():
             rclpy.shutdown()
         except:
             pass
+
 
 if __name__ == '__main__':
     main()
