@@ -265,6 +265,56 @@ source /workspace/install/setup.bash
 
 ---
 
+## 🧠 NVIDIA Isaac ROS ESS (DNN Stereo Depth Estimation) 啟動與驗證指引
+
+專案已完整整合並編譯 **NVIDIA Isaac ROS ESS**（`isaac_ros_ess` 與 `isaac_ros_stereo_image_proc`），利用 Jetson Orin Nano 的 TensorRT 加速雙目立體神經網路，實現高幀率（>150 FPS）、高精度的視差圖（Disparity）與度量深度圖（Depth Map）估算。
+
+### 1. 深度推論模型規格 (TensorRT FP16)
+- **Light ESS Engine (`light_ess.engine`)**：
+  - 輸入解析度：`480 x 288`
+  - 推論延遲：**6.70 ms**
+  - 運算吞吐量：**154.5 FPS**（推薦用於機器人即時建圖與避障）
+- **Full ESS Engine (`ess.engine`)**：
+  - 輸入解析度：`960 x 576`
+  - 推論延遲：**23.6 ms**
+  - 運算吞吐量：**43.8 FPS**
+
+### 2. 即時連線啟動 ESS 深度管線
+搭配實體雙目相機（`image_splitter_node`）即時推論：
+
+* **終端 A（啟動機器人硬體與雙目相機串流）：**
+  ```bash
+  ros2 launch my_robot_bringup robot.launch.py
+  ```
+
+* **終端 B（一鍵啟動 ESS 視差與深度圖推論節點）：**
+  ```bash
+  ros2 launch my_robot_bringup isaac_ess.launch.py
+  ```
+
+### 3. Rosbag 離線資料回放驗證
+使用錄製好的 Rosbag 回放進行深度神經網路推論驗證：
+
+* **終端 A（啟動 ESS 深度推論節點並啟用模擬時鐘）：**
+  ```bash
+  ros2 launch my_robot_bringup isaac_ess.launch.py use_sim_time:=true
+  ```
+
+* **終端 B（回放指定 Rosbag）：**
+  ```bash
+  ros2 bag play <rosbag資料夾路徑> --clock
+  ```
+
+### 4. 關鍵深度主題 (Topics) 列表
+
+| 類型 | 主題名稱 | 訊息格式 | 說明 |
+| :--- | :--- | :--- | :--- |
+| **輸入** | `/camera/left/image_raw`, `/camera/right/image_raw` | `sensor_msgs/msg/Image` | 左 / 右鏡頭影像（支援 `mono8` 與 `rgb8`） |
+| **輸入** | `/camera/left/camera_info`, `/camera/right/camera_info` | `sensor_msgs/msg/CameraInfo` | 雙目相機標定內參與基線 |
+| **輸出** | `/stereo/disparity` | `stereo_msgs/msg/DisparityImage` | ESS 輸出的 GPU 視差圖 |
+| **輸出** | `/stereo/depth` | `sensor_msgs/msg/Image` (`32FC1`) | 轉換後的公尺度量深度圖（Metric Depth Map） |
+
+---
 ## 🛡️ 核心維運與安全指南
 
 ### 2. 獨立啟動 micro-ROS Agent (數據偵錯與硬體切換)
