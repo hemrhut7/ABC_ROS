@@ -2,6 +2,7 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
+from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -18,6 +19,8 @@ def generate_launch_description():
     enable_imu_fusion = LaunchConfiguration('enable_imu_fusion')
     enable_ground_constraint = LaunchConfiguration('enable_ground_constraint')
     image_jitter_threshold_ms = LaunchConfiguration('image_jitter_threshold_ms')
+    publish_robot_state = LaunchConfiguration('publish_robot_state')
+    publish_map_to_odom_tf = LaunchConfiguration('publish_map_to_odom_tf')
 
     declare_use_sim_time = DeclareLaunchArgument(
         'use_sim_time',
@@ -30,7 +33,7 @@ def generate_launch_description():
     # drift caused by asynchronous ~29ms USB/Serial time offset.
     declare_enable_imu_fusion = DeclareLaunchArgument(
         'enable_imu_fusion',
-        default_value='false',
+        default_value='true',
         description='Enable IMU fusion in cuVSLAM (default false for async USB/Serial sensors)'
     )
 
@@ -46,11 +49,25 @@ def generate_launch_description():
         description='Max allowed inter-frame jitter in ms (default 60ms for USB cameras)'
     )
 
+    declare_publish_robot_state = DeclareLaunchArgument(
+        'publish_robot_state',
+        default_value='false',
+        description='Launch robot_state_publisher (default false because robot.launch.py already provides it)'
+    )
+
+    declare_publish_map_to_odom_tf = DeclareLaunchArgument(
+        'publish_map_to_odom_tf',
+        default_value='false',
+        description='Publish map->odom transform (default false to prevent uninitialized NaN TF in RViz)'
+    )
+
     return LaunchDescription([
         declare_use_sim_time,
         declare_enable_imu_fusion,
         declare_ground_constraint,
         declare_image_jitter_threshold,
+        declare_publish_robot_state,
+        declare_publish_map_to_odom_tf,
 
         # 0. Robot State Publisher (Static TF for base_link, camera optical frames, and imu_link)
         Node(
@@ -58,6 +75,7 @@ def generate_launch_description():
             executable='robot_state_publisher',
             name='robot_state_publisher',
             output='screen',
+            condition=IfCondition(publish_robot_state),
             parameters=[{
                 'use_sim_time': use_sim_time,
                 'robot_description': robot_desc
@@ -76,6 +94,8 @@ def generate_launch_description():
                 'rectified_images': False,
                 'enable_imu_fusion': enable_imu_fusion,
                 'enable_ground_constraint_in_odometry': enable_ground_constraint,
+                'publish_map_to_odom_tf': False,
+                'publish_odom_to_base_tf': True,
                 'base_frame': 'base_link',
                 'imu_frame': 'imu_link',
                 'map_frame': 'map',
@@ -96,9 +116,9 @@ def generate_launch_description():
                 'calibration_frequency': 200.0,
             }],
             remappings=[
-                ('visual_slam/image_0', '/camera/left/image_raw'),
+                ('visual_slam/image_0', '/camera/left/image_mono'),
                 ('visual_slam/camera_info_0', '/camera/left/camera_info'),
-                ('visual_slam/image_1', '/camera/right/image_raw'),
+                ('visual_slam/image_1', '/camera/right/image_mono'),
                 ('visual_slam/camera_info_1', '/camera/right/camera_info'),
                 ('visual_slam/imu', '/imu/data_raw'),
             ]

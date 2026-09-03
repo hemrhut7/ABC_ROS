@@ -38,10 +38,12 @@ private:
   bool is_v4l2_capture_device(int index, std::string & card_name);
   std::string build_gstreamer_pipeline(int dev_idx, int w, int h, int fps_val, int rot_angle, const std::string & decoder_type);
   int open_camera(int preferred_device, bool auto_scan);
+  bool try_open_hw_pipeline(int dev_idx, const std::string & card_name);
 
   // Parameters
   bool use_hardware_decode_{true};
   std::string hw_decoder_type_{"nvjpegdec"};
+  int hw_open_max_retries_{3};
   int video_device_{0};
   bool auto_detect_device_{true};
   int width_{1280};

@@ -51,6 +51,7 @@ ImageSplitterNode::ImageSplitterNode(const rclcpp::NodeOptions & options)
   // Declare parameters
   this->declare_parameter<bool>("use_hardware_decode", true);
   this->declare_parameter<std::string>("hw_decoder_type", "jpegdec");
+  this->declare_parameter<int>("hw_open_max_retries", 10);
   this->declare_parameter<int>("video_device", 0);
   this->declare_parameter<bool>("auto_detect_device", true);
   this->declare_parameter<int>("width", 1280);
@@ -79,6 +80,7 @@ ImageSplitterNode::ImageSplitterNode(const rclcpp::NodeOptions & options)
   // Get parameters
   use_hardware_decode_ = this->get_parameter("use_hardware_decode").as_bool();
   hw_decoder_type_ = this->get_parameter("hw_decoder_type").as_string();
+  hw_open_max_retries_ = this->get_parameter("hw_open_max_retries").as_int();
   video_device_ = this->get_parameter("video_device").as_int();
   auto_detect_device_ = this->get_parameter("auto_detect_device").as_bool();
   width_ = this->get_parameter("width").as_int();
@@ -127,7 +129,7 @@ ImageSplitterNode::ImageSplitterNode(const rclcpp::NodeOptions & options)
   RCLCPP_INFO(this->get_logger(),
     "====================================================\n"
     "Initializing Jetson Stereo Camera Pipeline (rclcpp Composable Node):\n"
-    "  HW Acceleration: %s (Decoder: %s)\n"
+    "  HW Acceleration: %s (Decoder: %s, Open Retries: %d)\n"
     "  Preferred Device: /dev/video%d (Auto Scan: %s)\n"
     "  Target Resolution: %dx%d @ %d FPS (FOURCC: %s)\n"
     "  Rotation Angle: %d deg\n"
@@ -138,7 +140,7 @@ ImageSplitterNode::ImageSplitterNode(const rclcpp::NodeOptions & options)
     "    - Compressed Stream: %s (Rate: %s, Quality: %d)\n"
     "====================================================",
     use_hardware_decode_ ? "Enabled (Jetson NVDEC + VIC)" : "Disabled (Software V4L2)",
-    hw_decoder_type_.c_str(),
+    hw_decoder_type_.c_str(), hw_open_max_retries_,
     video_device_, auto_detect_device_ ? "Enabled" : "Disabled",
     width_, height_, fps_, fourcc_.c_str(),
     rotation_angle_,
@@ -278,6 +280,51 @@ bool ImageSplitterNode::is_v4l2_capture_device(int index, std::string & card_nam
   return true;
 }
 
+bool ImageSplitterNode::try_open_hw_pipeline(int dev_idx, const std::string & card_name)
+{
+  std::string gst_pipe = build_gstreamer_pipeline(
+    dev_idx, width_, height_, fps_, rotation_angle_, hw_decoder_type_);
+
+  const int max_retries = std::max(hw_open_max_retries_, 1);
+
+  for (int attempt = 1; attempt <= max_retries; ++attempt) {
+    RCLCPP_INFO(this->get_logger(),
+      "HW pipeline open attempt %d/%d on /dev/video%d (%s) with pipeline:\n  %s",
+      attempt, max_retries, dev_idx, card_name.c_str(), gst_pipe.c_str());
+
+    if (cap_.open(gst_pipe, cv::CAP_GSTREAMER)) {
+      hardware_decode_active_ = true;
+      hardware_rotated_ = (rotation_angle_ != 0);
+      // Warmup camera sensor to stabilize Auto-Exposure / Auto-White-Balance
+      cv::Mat dummy_f;
+      for (int i = 0; i < 5; ++i) {
+        cap_.read(dummy_f);
+      }
+      RCLCPP_INFO(this->get_logger(),
+        "Successfully opened hardware decode pipeline on /dev/video%d (%s) (attempt %d/%d)!",
+        dev_idx, card_name.c_str(), attempt, max_retries);
+      return true;
+    }
+
+    cap_.release();
+
+    if (attempt < max_retries) {
+      // Exponential backoff: 100ms, 200ms, 400ms ...
+      int backoff_ms = 100 * (1 << (attempt - 1));
+      RCLCPP_WARN(this->get_logger(),
+        "HW pipeline open attempt %d/%d failed on /dev/video%d. Retrying in %d ms...",
+        attempt, max_retries, dev_idx, backoff_ms);
+      std::this_thread::sleep_for(std::chrono::milliseconds(backoff_ms));
+    } else {
+      RCLCPP_WARN(this->get_logger(),
+        "HW pipeline open failed on /dev/video%d after %d attempt(s).",
+        dev_idx, max_retries);
+    }
+  }
+
+  return false;
+}
+
 int ImageSplitterNode::open_camera(int preferred_device, bool auto_scan)
 {
   std::string card_name;
@@ -285,27 +332,9 @@ int ImageSplitterNode::open_camera(int preferred_device, bool auto_scan)
   // 1. Attempt hardware GStreamer pipeline if use_hardware_decode_ is true
   if (use_hardware_decode_) {
     if (preferred_device >= 0 && is_v4l2_capture_device(preferred_device, card_name)) {
-      std::string gst_pipe = build_gstreamer_pipeline(
-        preferred_device, width_, height_, fps_, rotation_angle_, hw_decoder_type_);
-      RCLCPP_INFO(this->get_logger(),
-        "Attempting Jetson HW decode on /dev/video%d (%s) with pipeline:\n  %s",
-        preferred_device, card_name.c_str(), gst_pipe.c_str());
-
-      if (cap_.open(gst_pipe, cv::CAP_GSTREAMER)) {
-        hardware_decode_active_ = true;
-        hardware_rotated_ = (rotation_angle_ != 0);
-        // Warmup camera sensor to stabilize Auto-Exposure / Auto-White-Balance
-        cv::Mat dummy_f;
-        for (int i = 0; i < 5; ++i) {
-          cap_.read(dummy_f);
-        }
-        RCLCPP_INFO(this->get_logger(), "Successfully opened hardware decode pipeline on /dev/video%d (%s)!",
-          preferred_device, card_name.c_str());
+      if (try_open_hw_pipeline(preferred_device, card_name)) {
         return preferred_device;
       }
-      cap_.release();
-      std::this_thread::sleep_for(std::chrono::milliseconds(50));
-      RCLCPP_WARN(this->get_logger(), "Failed to open HW pipeline on preferred /dev/video%d.", preferred_device);
     }
 
     if (auto_scan) {
@@ -314,17 +343,9 @@ int ImageSplitterNode::open_camera(int preferred_device, bool auto_scan)
         if (dev_idx == preferred_device || !is_v4l2_capture_device(dev_idx, card_name)) {
           continue;
         }
-        std::string gst_pipe = build_gstreamer_pipeline(
-          dev_idx, width_, height_, fps_, rotation_angle_, hw_decoder_type_);
-        if (cap_.open(gst_pipe, cv::CAP_GSTREAMER)) {
-          hardware_decode_active_ = true;
-          hardware_rotated_ = (rotation_angle_ != 0);
-          RCLCPP_INFO(this->get_logger(), "Auto-scan found and opened HW decode pipeline on /dev/video%d (%s)!",
-            dev_idx, card_name.c_str());
+        if (try_open_hw_pipeline(dev_idx, card_name)) {
           return dev_idx;
         }
-        cap_.release();
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
       }
     }
 

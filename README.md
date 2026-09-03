@@ -131,6 +131,17 @@ jetson-containers run \
   $(autotag ros:humble-ros-base)
 ```
 
+```bash
+jetson-containers run \
+  --privileged \
+  -v /dev:/dev \
+  -v ~/ROS_ABC:/workspace \
+  -v /opt/nvidia/vpi3:/opt/nvidia/vpi3 \
+  -e CMAKE_PREFIX_PATH=/opt/ros/humble:/opt/nvidia/vpi3/lib/aarch64-linux-gnu/cmake/vpi \
+  -e vpi_DIR=/opt/nvidia/vpi3/lib/aarch64-linux-gnu/cmake/vpi \
+  ros:humble-ros-base-hank bash
+```
+
 > [!NOTE]
 > - `--privileged`：提供容器直接讀寫 Host 硬體（如 USB 轉序列埠 `/dev/ttyUSB*`、GPIO UART `/dev/ttyTHS*` 以及 USB 相機 `/dev/video*`）的權限。
 > - `-v ~/ROS_ABC:/workspace`：將專案目錄掛載至容器內的 `/workspace` 路徑，實現即時程式修改與持續編譯。
