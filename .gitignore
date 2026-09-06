@@ -20,9 +20,14 @@ log/
 env/
 venv/
 
-# Log Recordings
-/ros2_bag
-/output
+# Log Recordings & Datasets
+/ros2_bag/
+/output/
+*.bag
+*.db3
+*.db3-wal
+*.db3-shm
+*.mcap
 
 # Agent settings & scratchpad
 .agents/
@@ -35,4 +40,11 @@ venv/
 isaac_ros_assets/
 *.onnx
 *.engine
+*.plan
 *.tar.gz
+*.pth
+*.pt
+
+# Point clouds and heavy binary outputs
+*.pcd
+*.ply
