@@ -34,24 +34,24 @@ use_gpu_ceres: 0
 estimate_extrinsic: 0
 
 # Transformation from IMU body frame to Camera frame
-# 來源: Kalibr calibration (kalibr_mono_20260902_222614)
+# 來源: Kalibr calibration (kalibr_mono_20260906_114026)
 # body_T_cam = inv(T_cam_imu)  — T_cam_imu from camchain-imucam.yaml
 body_T_cam0: !!opencv-matrix
    rows: 4
    cols: 4
    dt: d
-   data: [ 0.02796172,  0.00194742,  0.99960710,  0.04374691,
-          -0.99959602,  0.00514903,  0.02795138,  0.04212023,
-          -0.00509258, -0.99998485,  0.00209061,  0.09675078,
+   data: [ 0.02367378,  0.00337240,  0.99971405,  0.04427751,
+          -0.99971785,  0.00202436,  0.02366704,  0.04159181,
+          -0.00194397, -0.99999226,  0.00341938,  0.09237273,
            0.0,         0.0,         0.0,         1.0 ]
 
 body_T_cam1: !!opencv-matrix
    rows: 4
    cols: 4
    dt: d
-   data: [ 0.01473626, -0.00597031,  0.99987359,  0.04543634,
-          -0.99987737,  0.00521138,  0.01476743, -0.00977094,
-          -0.00529888, -0.99996860, -0.00589279,  0.09630265,
+   data: [ 0.01044752, -0.00454501,  0.99993509,  0.04574459,
+          -0.99994307,  0.00212074,  0.01045724, -0.01030727,
+          -0.00216813, -0.99998742, -0.00452259,  0.09208839,
            0.0,         0.0,         0.0,         1.0 ]
 
 # Multiple thread support
@@ -79,8 +79,8 @@ gyr_w: 0.00010            # 陀螺儀零偏隨機遊走 (rad/s^2 / sqrt(Hz))
 g_norm: 9.81007           # gravity magnitude
 
 # ======================== Time Offset ========================
-# 來源: Kalibr camchain-imucam (timeshift_cam_imu: -0.03301s)
-# 附註: 相機驅動層 (image_splitter_node) 已啟用 timestamp_offset_ms: 33.0 自動回推，此處設為 0.0
+# 來源: Kalibr camchain-imucam (kalibr_mono_20260906_114026, timeshift_cam_imu: ~0.00023s)
+# 附註: 時間差已小於 0.3 ms，相機與 IMU 硬體時脈嚴格對齊，此處 td 設為 0.0
 estimate_td: 0                      # online estimate time offset between camera and imu
 td: 0.0                             # initial value of time offset (s)
 

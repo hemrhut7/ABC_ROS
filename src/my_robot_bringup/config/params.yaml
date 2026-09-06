@@ -10,7 +10,7 @@ image_splitter_node:
     fourcc: "MJPG"
     frame_id: "camera_link"
     rotation_angle: 180           # 0, 90, 180, 270 (hardware rotated via nvvidconv flip-method=2)
-    timestamp_offset_ms: 33.0     # Hardware transmission & decode latency compensation in ms (0.0 = disabled)
+    timestamp_offset_ms: 0.0     # Hardware transmission & decode latency compensation in ms (0.0 = disabled)
     publish_bgr: true
     publish_mono: true
     publish_compressed: true
