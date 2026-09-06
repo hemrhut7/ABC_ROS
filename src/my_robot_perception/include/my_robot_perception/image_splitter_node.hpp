@@ -30,10 +30,8 @@ private:
   void process_and_publish_frame(cv::Mat & frame);
   void publish_camera_info(
     const rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr & publisher,
-    const std_msgs::msg::Header & header,
-    bool is_left,
-    int width,
-    int height);
+    const rclcpp::Time & timestamp,
+    bool is_left);
 
   bool is_v4l2_capture_device(int index, std::string & card_name);
   std::string build_gstreamer_pipeline(int dev_idx, int w, int h, int fps_val, int rot_angle, const std::string & decoder_type);

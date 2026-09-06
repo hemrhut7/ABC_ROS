@@ -591,13 +591,13 @@ void ImageSplitterNode::process_and_publish_frame(cv::Mat & frame)
     }
   }
 
-  // 4. Publish Camera Info (Synchronized with images)
-  std_msgs::msg::Header info_header;
-  info_header.stamp = timestamp;
-  info_header.frame_id = left_frame_id_;
-  publish_camera_info(left_info_pub_, info_header, true, half_w, h);
-  info_header.frame_id = right_frame_id_;
-  publish_camera_info(right_info_pub_, info_header, false, half_w, h);
+  // 4. Publish Camera Info (Synchronized with images, zero allocation)
+  if (left_info_subs > 0) {
+    publish_camera_info(left_info_pub_, timestamp, true);
+  }
+  if (right_info_subs > 0) {
+    publish_camera_info(right_info_pub_, timestamp, false);
+  }
 
   // Log subscriber changes
   if (left_bgr_subs != prev_left_bgr_subs_ || right_bgr_subs != prev_right_bgr_subs_ ||
@@ -622,6 +622,7 @@ void ImageSplitterNode::init_camera_info()
   int h = height_;
 
   // Left Camera (cam0) calibration
+  left_info_msg_.header.frame_id = left_frame_id_;
   left_info_msg_.width = half_w;
   left_info_msg_.height = h;
   left_info_msg_.distortion_model = "plumb_bob";
@@ -643,6 +644,7 @@ void ImageSplitterNode::init_camera_info()
   };
 
   // Right Camera (cam1) calibration (Baseline from Kalibr: 51.912mm = 0.05191207112027276m)
+  right_info_msg_.header.frame_id = right_frame_id_;
   right_info_msg_.width = half_w;
   right_info_msg_.height = h;
   right_info_msg_.distortion_model = "plumb_bob";
@@ -666,15 +668,11 @@ void ImageSplitterNode::init_camera_info()
 
 void ImageSplitterNode::publish_camera_info(
   const rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr & publisher,
-  const std_msgs::msg::Header & header,
-  bool is_left,
-  int width,
-  int height)
+  const rclcpp::Time & timestamp,
+  bool is_left)
 {
-  (void)width;
-  (void)height;
   auto & info_msg = is_left ? left_info_msg_ : right_info_msg_;
-  info_msg.header = header;
+  info_msg.header.stamp = timestamp;
   publisher->publish(info_msg);
 }
 

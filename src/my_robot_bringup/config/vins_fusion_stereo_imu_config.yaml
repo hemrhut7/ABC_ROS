@@ -33,7 +33,7 @@ use_gpu_ceres: 0
 # 1: Have an initial guess, system will optimize online
 estimate_extrinsic: 0
 
-# Transformation from IMU body frame to Camera frame
+# Transformation from Camera frame to IMU body frame (p_imu = body_T_cam * p_cam)
 # 來源: Kalibr calibration (kalibr_mono_20260906_114026)
 # body_T_cam = inv(T_cam_imu)  — T_cam_imu from camchain-imucam.yaml
 body_T_cam0: !!opencv-matrix
