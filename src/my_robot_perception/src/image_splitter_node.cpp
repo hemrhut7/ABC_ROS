@@ -181,6 +181,9 @@ ImageSplitterNode::ImageSplitterNode(const rclcpp::NodeOptions & options)
   // Initialize static CameraInfo message buffers for Zero-Allocation publishing
   init_camera_info();
 
+  // Initialize static Mat and ROS Image buffers for Zero-Allocation publishing
+  init_buffers();
+
   // Open camera
   int active_device = open_camera(video_device_, auto_detect_device_);
   if (active_device < 0 || !cap_.isOpened()) {
@@ -498,56 +501,66 @@ void ImageSplitterNode::process_and_publish_frame(cv::Mat & frame)
 
   int h = frame.rows;
   int w = frame.cols;
+
+  // Dimension guard: prevent buffer overread / SIGSEGV if camera resolution renegotiates or mismatches
+  if (w != width_ || h != height_) {
+    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
+      "Frame dimension mismatch: expected %dx%d, got %dx%d. Dropping frame.",
+      width_, height_, w, h);
+    return;
+  }
+
   int half_w = w / 2;
 
-  // Split stereo image into left and right ROIs (clone to ensure continuous memory layout for cv_bridge)
-  cv::Mat left_frame = frame(cv::Rect(0, 0, half_w, h)).clone();
-  cv::Mat right_frame = frame(cv::Rect(half_w, 0, half_w, h)).clone();
+  // Zero-Allocation: Non-owning ROI views directly on the input frame
+  cv::Mat left_roi = frame(cv::Rect(0, 0, half_w, h));
+  cv::Mat right_roi = frame(cv::Rect(half_w, 0, half_w, h));
 
-  // Common Headers
-  std_msgs::msg::Header left_header;
-  left_header.stamp = timestamp;
-  left_header.frame_id = left_frame_id_;
+  // Update timestamps directly on pre-allocated messages (avoiding std::string heap allocations for frame_id)
+  left_bgr_msg_.header.stamp = timestamp;
+  right_bgr_msg_.header.stamp = timestamp;
+  left_mono_msg_.header.stamp = timestamp;
+  right_mono_msg_.header.stamp = timestamp;
 
-  std_msgs::msg::Header right_header;
-  right_header.stamp = timestamp;
-  right_header.frame_id = right_frame_id_;
-
-  // 1. Publish BGR8 stream (Throttled, e.g. 15 Hz)
+  // 1. Publish BGR8 stream (Throttled, e.g. 15 Hz) - Single-pass strided copy directly into msg.data
   if (should_publish_bgr) {
     if (left_bgr_subs > 0) {
-      auto left_bgr_msg = cv_bridge::CvImage(left_header, "bgr8", left_frame).toImageMsg();
-      left_bgr_pub_->publish(*left_bgr_msg);
+      cv::Mat left_bgr_dst(h, half_w, CV_8UC3, left_bgr_msg_.data.data(), left_bgr_msg_.step);
+      left_roi.copyTo(left_bgr_dst);
+      left_bgr_pub_->publish(left_bgr_msg_);
     }
     if (right_bgr_subs > 0) {
-      auto right_bgr_msg = cv_bridge::CvImage(right_header, "bgr8", right_frame).toImageMsg();
-      right_bgr_pub_->publish(*right_bgr_msg);
+      cv::Mat right_bgr_dst(h, half_w, CV_8UC3, right_bgr_msg_.data.data(), right_bgr_msg_.step);
+      right_roi.copyTo(right_bgr_dst);
+      right_bgr_pub_->publish(right_bgr_msg_);
     }
   }
 
-  // 2. Publish Mono8 stream (Full speed 60 Hz + Gaussian de-noising)
+  // 2. Publish Mono8 stream (Full speed 60 Hz + optional Gaussian de-noising) - Single-pass conversion
   if (should_publish_mono) {
     if (left_mono_subs > 0) {
-      cv::Mat left_gray;
-      cv::cvtColor(left_frame, left_gray, cv::COLOR_BGR2GRAY);
+      cv::Mat left_mono_dst(h, half_w, CV_8UC1, left_mono_msg_.data.data(), left_mono_msg_.step);
       if (enable_mono_filter_) {
-        cv::GaussianBlur(left_gray, left_gray,
+        cv::cvtColor(left_roi, left_filtered_buf_, cv::COLOR_BGR2GRAY);
+        cv::GaussianBlur(left_filtered_buf_, left_mono_dst,
           cv::Size(mono_filter_ksize_, mono_filter_ksize_),
           mono_filter_sigma_, mono_filter_sigma_);
+      } else {
+        cv::cvtColor(left_roi, left_mono_dst, cv::COLOR_BGR2GRAY);
       }
-      auto left_mono_msg = cv_bridge::CvImage(left_header, "mono8", left_gray).toImageMsg();
-      left_mono_pub_->publish(*left_mono_msg);
+      left_mono_pub_->publish(left_mono_msg_);
     }
     if (right_mono_subs > 0) {
-      cv::Mat right_gray;
-      cv::cvtColor(right_frame, right_gray, cv::COLOR_BGR2GRAY);
+      cv::Mat right_mono_dst(h, half_w, CV_8UC1, right_mono_msg_.data.data(), right_mono_msg_.step);
       if (enable_mono_filter_) {
-        cv::GaussianBlur(right_gray, right_gray,
+        cv::cvtColor(right_roi, right_filtered_buf_, cv::COLOR_BGR2GRAY);
+        cv::GaussianBlur(right_filtered_buf_, right_mono_dst,
           cv::Size(mono_filter_ksize_, mono_filter_ksize_),
           mono_filter_sigma_, mono_filter_sigma_);
+      } else {
+        cv::cvtColor(right_roi, right_mono_dst, cv::COLOR_BGR2GRAY);
       }
-      auto right_mono_msg = cv_bridge::CvImage(right_header, "mono8", right_gray).toImageMsg();
-      right_mono_pub_->publish(*right_mono_msg);
+      right_mono_pub_->publish(right_mono_msg_);
     }
   }
 
@@ -556,9 +569,10 @@ void ImageSplitterNode::process_and_publish_frame(cv::Mat & frame)
     std::vector<int> encode_params = {cv::IMWRITE_JPEG_QUALITY, jpeg_quality_};
     if (left_comp_subs > 0) {
       std::vector<uchar> buf;
-      if (cv::imencode(".jpg", left_frame, buf, encode_params)) {
+      if (cv::imencode(".jpg", left_roi, buf, encode_params)) {
         sensor_msgs::msg::CompressedImage comp_msg;
-        comp_msg.header = left_header;
+        comp_msg.header.stamp = timestamp;
+        comp_msg.header.frame_id = left_frame_id_;
         comp_msg.format = "jpeg";
         comp_msg.data = std::move(buf);
         left_compressed_pub_->publish(comp_msg);
@@ -566,9 +580,10 @@ void ImageSplitterNode::process_and_publish_frame(cv::Mat & frame)
     }
     if (right_comp_subs > 0) {
       std::vector<uchar> buf;
-      if (cv::imencode(".jpg", right_frame, buf, encode_params)) {
+      if (cv::imencode(".jpg", right_roi, buf, encode_params)) {
         sensor_msgs::msg::CompressedImage comp_msg;
-        comp_msg.header = right_header;
+        comp_msg.header.stamp = timestamp;
+        comp_msg.header.frame_id = right_frame_id_;
         comp_msg.format = "jpeg";
         comp_msg.data = std::move(buf);
         right_compressed_pub_->publish(comp_msg);
@@ -577,8 +592,12 @@ void ImageSplitterNode::process_and_publish_frame(cv::Mat & frame)
   }
 
   // 4. Publish Camera Info (Synchronized with images)
-  publish_camera_info(left_info_pub_, left_header, true, half_w, h);
-  publish_camera_info(right_info_pub_, right_header, false, half_w, h);
+  std_msgs::msg::Header info_header;
+  info_header.stamp = timestamp;
+  info_header.frame_id = left_frame_id_;
+  publish_camera_info(left_info_pub_, info_header, true, half_w, h);
+  info_header.frame_id = right_frame_id_;
+  publish_camera_info(right_info_pub_, info_header, false, half_w, h);
 
   // Log subscriber changes
   if (left_bgr_subs != prev_left_bgr_subs_ || right_bgr_subs != prev_right_bgr_subs_ ||
@@ -657,6 +676,35 @@ void ImageSplitterNode::publish_camera_info(
   auto & info_msg = is_left ? left_info_msg_ : right_info_msg_;
   info_msg.header = header;
   publisher->publish(info_msg);
+}
+
+void ImageSplitterNode::init_buffers()
+{
+  int half_w = width_ / 2;
+  int h = height_;
+
+  if (enable_mono_filter_) {
+    left_filtered_buf_.create(h, half_w, CV_8UC1);
+    right_filtered_buf_.create(h, half_w, CV_8UC1);
+  }
+
+  // Pre-configure static ROS 2 Image messages
+  auto configure_image_msg = [h, half_w](
+    sensor_msgs::msg::Image & msg, const std::string & frame_id, const std::string & encoding, int channels)
+  {
+    msg.header.frame_id = frame_id;
+    msg.height = h;
+    msg.width = half_w;
+    msg.encoding = encoding;
+    msg.is_bigendian = false;
+    msg.step = half_w * channels;
+    msg.data.resize(static_cast<size_t>(h) * msg.step);
+  };
+
+  configure_image_msg(left_bgr_msg_, left_frame_id_, "bgr8", 3);
+  configure_image_msg(right_bgr_msg_, right_frame_id_, "bgr8", 3);
+  configure_image_msg(left_mono_msg_, left_frame_id_, "mono8", 1);
+  configure_image_msg(right_mono_msg_, right_frame_id_, "mono8", 1);
 }
 
 }  // namespace my_robot_perception

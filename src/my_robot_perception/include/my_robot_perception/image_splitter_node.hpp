@@ -111,6 +111,17 @@ private:
   sensor_msgs::msg::CameraInfo right_info_msg_;
   void init_camera_info();
 
+  // Pre-allocated continuous image buffers for Zero-Allocation pipeline
+  void init_buffers();
+  cv::Mat left_filtered_buf_;
+  cv::Mat right_filtered_buf_;
+
+  // Pre-allocated ROS Image messages for Zero-Allocation publishing
+  sensor_msgs::msg::Image left_bgr_msg_;
+  sensor_msgs::msg::Image right_bgr_msg_;
+  sensor_msgs::msg::Image left_mono_msg_;
+  sensor_msgs::msg::Image right_mono_msg_;
+
   // OpenCV & Threading
   cv::VideoCapture cap_;
   std::atomic<bool> running_{false};
