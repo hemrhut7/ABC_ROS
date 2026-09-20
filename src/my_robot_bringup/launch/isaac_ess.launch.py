@@ -59,7 +59,44 @@ def generate_launch_description():
         }]
     )
 
-    # 1. Isaac ROS ESS Disparity Node (DNN Inference)
+    # 1. Left & Right Camera Hardware-Accelerated Rectify Nodes (Undistortion & Epipolar Alignment)
+    rectify_left_node = ComposableNode(
+        name='rectify_left_node',
+        package='isaac_ros_image_proc',
+        plugin='nvidia::isaac_ros::image_proc::RectifyNode',
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'output_width': 640,
+            'output_height': 480,
+            'type_negotiation_duration_s': 5,
+        }],
+        remappings=[
+            ('image_raw', '/camera/left/image_raw'),
+            ('camera_info', '/camera/left/camera_info'),
+            ('image_rect', '/camera/left/image_rect'),
+            ('camera_info_rect', '/camera/left/camera_info_rect'),
+        ]
+    )
+
+    rectify_right_node = ComposableNode(
+        name='rectify_right_node',
+        package='isaac_ros_image_proc',
+        plugin='nvidia::isaac_ros::image_proc::RectifyNode',
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'output_width': 640,
+            'output_height': 480,
+            'type_negotiation_duration_s': 5,
+        }],
+        remappings=[
+            ('image_raw', '/camera/right/image_raw'),
+            ('camera_info', '/camera/right/camera_info'),
+            ('image_rect', '/camera/right/image_rect'),
+            ('camera_info_rect', '/camera/right/camera_info_rect'),
+        ]
+    )
+
+    # 2. Isaac ROS ESS Disparity Node (DNN Inference on Rectified Images)
     ess_disparity_node = ComposableNode(
         name='ess_disparity_node',
         package='isaac_ros_ess',
@@ -73,15 +110,15 @@ def generate_launch_description():
             'type_negotiation_duration_s': 5,
         }],
         remappings=[
-            ('left/image_rect', '/camera/left/image_raw'),
-            ('right/image_rect', '/camera/right/image_raw'),
-            ('left/camera_info', '/camera/left/camera_info'),
-            ('right/camera_info', '/camera/right/camera_info'),
+            ('left/image_rect', '/camera/left/image_rect'),
+            ('right/image_rect', '/camera/right/image_rect'),
+            ('left/camera_info', '/camera/left/camera_info_rect'),
+            ('right/camera_info', '/camera/right/camera_info_rect'),
             ('disparity', '/stereo/disparity'),
         ]
     )
 
-    # 2. Disparity to Depth Image Node (metric depth in meters)
+    # 3. Disparity to Depth Image Node (metric depth in meters)
     disparity_to_depth_node = ComposableNode(
         name='disparity_to_depth_node',
         package='isaac_ros_stereo_image_proc',
@@ -103,6 +140,8 @@ def generate_launch_description():
         package='rclcpp_components',
         executable='component_container_mt',
         composable_node_descriptions=[
+            rectify_left_node,
+            rectify_right_node,
             ess_disparity_node,
             disparity_to_depth_node,
         ],
