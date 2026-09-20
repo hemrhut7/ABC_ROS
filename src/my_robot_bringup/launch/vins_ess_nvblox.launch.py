@@ -48,7 +48,7 @@ def generate_launch_description():
 
     declare_threshold = DeclareLaunchArgument(
         'threshold',
-        default_value='0.4',
+        default_value='0.6',
         description='Confidence threshold for ESS disparity'
     )
 
