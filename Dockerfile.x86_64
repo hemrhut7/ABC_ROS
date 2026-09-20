@@ -18,6 +18,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-isaac-ros-stereo-image-proc \
     ros-humble-isaac-ros-image-proc \
     ros-humble-isaac-ros-nitros \
+    ros-humble-cartographer \
+    ros-humble-cartographer-ros \
+    ros-humble-cartographer-rviz \
     ros-humble-magic-enum \
     ros-humble-foxglove-bridge \
     ros-humble-diagnostic-updater \
