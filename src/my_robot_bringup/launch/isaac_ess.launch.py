@@ -25,9 +25,19 @@ def generate_launch_description():
         description='Use simulation (Bag) clock if true'
     )
 
+    default_engine_candidates = [
+        '/workspaces/isaac_ros-dev/isaac_ros_assets/models/dnn_stereo_disparity/dnn_stereo_disparity_v4.1.0_onnx/light_ess.engine',
+        '/workspace/isaac_ros_assets/models/dnn_stereo_disparity/dnn_stereo_disparity_v4.1.0_onnx/light_ess.engine',
+    ]
+    default_engine = default_engine_candidates[0]
+    for p in default_engine_candidates:
+        if os.path.exists(p):
+            default_engine = p
+            break
+
     declare_engine_file_path = DeclareLaunchArgument(
         'engine_file_path',
-        default_value='/workspace/isaac_ros_assets/models/dnn_stereo_disparity/dnn_stereo_disparity_v4.1.0_onnx/light_ess.engine',
+        default_value=default_engine,
         description='Absolute path to ESS TensorRT engine plan'
     )
 
