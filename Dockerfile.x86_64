@@ -1,0 +1,47 @@
+# ==============================================================================
+# Isaac ROS Development & Evaluation Dockerfile (x86_64)
+# Base Image: Official Isaac ROS dev x86_64 image
+# ==============================================================================
+FROM isaac_ros_dev-x86_64:latest
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV FASTRTPS_DEFAULT_PROFILES_FILE=/usr/local/share/middleware_profiles/rtps_udp_profile.xml
+
+# 1. Remove conflicting Ceres 2.2 headers in /usr/local so VINS-Fusion uses Ceres 2.0 cleanly
+RUN rm -rf /usr/local/include/ceres /usr/local/lib/cmake/Ceres /usr/local/lib/libceres*
+
+# 2. Install official Isaac ROS binaries and additional ROS 2 packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-humble-isaac-ros-visual-slam \
+    ros-humble-isaac-ros-ess \
+    ros-humble-isaac-ros-nvblox \
+    ros-humble-isaac-ros-stereo-image-proc \
+    ros-humble-isaac-ros-image-proc \
+    ros-humble-isaac-ros-nitros \
+    ros-humble-magic-enum \
+    ros-humble-foxglove-bridge \
+    ros-humble-diagnostic-updater \
+    && rm -rf /var/lib/apt/lists/*
+
+# 3. Configure shared library cache for GXF modules
+RUN find /opt/ros/humble/share/isaac_ros_gxf/gxf/lib/ -name '*.so' -exec dirname {} \; | sort -u > /etc/ld.so.conf.d/isaac_ros_gxf.conf && \
+    ldconfig
+
+# 4. Create compatibility symlink between /workspace and /workspaces/isaac_ros-dev
+RUN rm -rf /workspace && mkdir -p /workspaces/isaac_ros-dev && ln -s /workspaces/isaac_ros-dev /workspace
+
+# 5. Configure Git safe directory and ROS environment auto-sourcing
+RUN git config --global --add safe.directory '*' && \
+    cat << 'EOF' >> /root/.bashrc
+
+# Sourcing ROS & Workspace
+source /opt/ros/humble/setup.bash
+if [ -f /workspaces/isaac_ros-dev/install/setup.bash ]; then
+    source /workspaces/isaac_ros-dev/install/setup.bash
+elif [ -f /workspace/install/setup.bash ]; then
+    source /workspace/install/setup.bash
+fi
+git config --global --add safe.directory '*' 2>/dev/null || true
+EOF
+
+WORKDIR /workspaces/isaac_ros-dev

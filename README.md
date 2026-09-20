@@ -314,6 +314,76 @@ source /workspace/install/setup.bash
 | **輸出** | `/stereo/disparity` | `stereo_msgs/msg/DisparityImage` | ESS 輸出的 GPU 視差圖 |
 | **輸出** | `/stereo/depth` | `sensor_msgs/msg/Image` (`32FC1`) | 轉換後的公尺度量深度圖（Metric Depth Map） |
 
+
+---
+
+## 🧭 VINS-Fusion (Stereo + IMU) 啟動與驗證指引
+
+專案已完整整合並支援在 Docker 容器內編譯與運行 **VINS-Fusion**，適用於本車雙目立體相機與 ESP32 (ICM-20948) IMU 數據。
+
+### 1. 啟動 VINS-Fusion 節點 (即時或 Rosbag 模式)
+
+* **離線 Rosbag 回放模式 (使用模擬時間)：**
+  ```bash
+  ros2 launch my_robot_bringup vins_fusion.launch.py use_sim_time:=true
+  ```
+
+* **實體機器人即時模式：**
+  ```bash
+  ros2 launch my_robot_bringup vins_fusion.launch.py
+  ```
+
+### 2. 關鍵主題 (Topics) 列表
+
+| 類型 | 主題名稱 | 訊息格式 | 說明 |
+| :--- | :--- | :--- | :--- |
+| **輸入** | `/camera/left/image_mono`, `/camera/right/image_mono` | `sensor_msgs/msg/Image` | 左 / 右鏡頭灰階影像 (`640x480 mono8`) |
+| **輸入** | `/imu/data_raw` | `sensor_msgs/msg/Imu` | ESP32 IMU 加速度與角速度數據 |
+| **輸出** | `/odometry` | `nav_msgs/msg/Odometry` | VIO 即時估算之里程計位姿與速度 |
+| **輸出** | `/path` | `nav_msgs/msg/Path` | 估算之完整運動軌跡 |
+| **輸出** | `/image_track` | `sensor_msgs/msg/Image` | 帶有特徵點追蹤可視化的左右影像 |
+| **輸出** | `/point_cloud` | `sensor_msgs/msg/PointCloud` | 3D 地圖稀疏特徵點雲 |
+
+---
+
+## 💻 x86_64 PC 開發與 Rosbag 回放快速指引 (一鍵腳本)
+
+本專案提供專屬腳本與 Dockerfile，可直接在配備 NVIDIA 顯示卡的 x86_64 PC 上啟動 Isaac ROS 與演算法回放：
+
+### 1. 一鍵啟動容器 (自動掛載 GPU、X11 顯示與工作空間)
+```bash
+./tools/run_isaac_ros_container.sh
+```
+
+### 2. 在容器終端中執行演算法節點 (終端 A)
+* **執行 cuVSLAM：**
+  ```bash
+  ros2 launch my_robot_bringup isaac_visual_slam.launch.py use_sim_time:=true enable_imu_fusion:=false
+  ```
+* **或執行 ESS 深度推論：**
+  ```bash
+  ros2 launch my_robot_bringup isaac_ess.launch.py use_sim_time:=true
+  ```
+* **或執行 VINS-Fusion：**
+  ```bash
+  ros2 launch my_robot_bringup vins_fusion.launch.py use_sim_time:=true
+  ```
+
+### 3. 另開終端回放 Rosbag (終端 B)
+```bash
+./tools/run_isaac_ros_container.sh
+ros2 bag play ros2_bag/rosbag2_total_20260903_203935 --clock
+```
+
+### 4. 開啟 RViz2 進行即時可視化 (終端 C)
+```bash
+./tools/run_isaac_ros_container.sh
+# 依據執行的套件選擇對應設定檔：
+rviz2 -d src/my_robot_bringup/rviz/isaac_visual_slam.rviz
+# 或
+rviz2 -d src/my_robot_bringup/rviz/vins_fusion.rviz
+```
+
 ---
 ## 🛡️ 核心維運與安全指南
 
@@ -404,10 +474,59 @@ sudo nvpmodel -m 0
 ```
 
 ### 切換資料夾的使用者權限
-```
+```bash
 sudo chown -R hank:hank ros2_bag/
 ```
 
+---
+
+## 🚀 x86_64 PC (RTX 3060) 深度學習與 SLAM 評估 (Isaac ROS & VINS-Fusion)
+
+專案提供了一鍵啟動的 Docker 容器與環境設定，可直接在本機 (x86_64 + NVIDIA GPU) 重放 ROS 2 Bag，並評估多種演算法：
+
+### 1. 啟動開發容器 (含 GPU 加速與 FastDDS 跨容器通訊)
+```bash
+./tools/run_isaac_ros_container.sh
 ```
-rviz2 -d src/my_robot_bringup/rviz/vins_fusion.rviz 
+> [!NOTE]
+> 容器自動配置 `FASTRTPS_DEFAULT_PROFILES_FILE`（強制 UDPv4），徹底解決 Host（非 root）與 Container（root）因 FastDDS SHM 權限隔離導致 `ros2 topic echo` 收不到資料的問題。
+
+### 2. 重放 ROS 2 Bag 與演算法啟動
+
+#### A. Isaac ROS ESS 深度推論 (DNN Stereo Disparity & Depth)
+在容器內啟動 ESS 節點：
+```bash
+ros2 launch my_robot_bringup isaac_ess.launch.py use_sim_time:=true
+```
+在另一個終端（容器內或 Host 端皆可）重放資料集：
+```bash
+ros2 bag play ros2_bag/rosbag2_total_20260903_203935 --clock
+```
+驗證深度與視差發布：
+```bash
+ros2 topic hz /stereo/disparity
+ros2 topic hz /stereo/depth
+```
+
+#### B. Isaac ROS cuVSLAM (硬體加速雙目視覺里程計)
+```bash
+ros2 launch my_robot_bringup isaac_visual_slam.launch.py use_sim_time:=true enable_imu_fusion:=false
+```
+驗證里程計輸出：
+```bash
+ros2 topic echo /visual_slam/tracking/odometry
+```
+
+#### C. VINS-Fusion (雙目 + IMU 緊耦合 VIO)
+```bash
+ros2 launch my_robot_bringup vins_fusion.launch.py use_sim_time:=true
+```
+使用 RViz2 視覺化：
+```bash
+rviz2 -d src/my_robot_bringup/rviz/vins_fusion.rviz
+```
+
+### 3. 一鍵自動化驗證所有管道
+```bash
+./tools/run_isaac_ros_container.sh "/workspaces/isaac_ros-dev/tools/test_all_pipelines.sh"
 ```
