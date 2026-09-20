@@ -153,7 +153,25 @@ def generate_launch_description():
         ]
     )
 
-    # 3.5 PointCloud Generator from Depth Image (for 3D Visual vs LiDAR Comparison)
+    # 3.5 Hardware-Accelerated Image Format Converter (BGR8 -> RGB8 for NVblox and Color PointCloud)
+    image_format_converter_node = ComposableNode(
+        name='image_format_converter_node',
+        package='isaac_ros_image_proc',
+        plugin='nvidia::isaac_ros::image_proc::ImageFormatConverterNode',
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'encoding_desired': 'rgb8',
+            'image_width': 640,
+            'image_height': 480,
+            'type_negotiation_duration_s': 5,
+        }],
+        remappings=[
+            ('image_raw', '/camera/left/image_rect'),
+            ('image', '/camera/left/image_rect_rgb'),
+        ]
+    )
+
+    # 3.6 PointCloud Generator from Depth Image (for 3D Visual vs LiDAR Comparison)
     point_cloud_xyz_node = ComposableNode(
         name='point_cloud_xyz_node',
         package='depth_image_proc',
@@ -178,6 +196,7 @@ def generate_launch_description():
             rectify_right_node,
             ess_disparity_node,
             disparity_to_depth_node,
+            image_format_converter_node,
             point_cloud_xyz_node,
         ],
         output='screen'
@@ -195,7 +214,7 @@ def generate_launch_description():
         remappings=[
             ('camera_0/depth/image', '/stereo/depth'),
             ('camera_0/depth/camera_info', '/camera/left/camera_info_rect'),
-            ('camera_0/color/image', '/camera/left/image_rect'),
+            ('camera_0/color/image', '/camera/left/image_rect_rgb'),
             ('camera_0/color/camera_info', '/camera/left/camera_info_rect'),
         ],
         output='screen'
