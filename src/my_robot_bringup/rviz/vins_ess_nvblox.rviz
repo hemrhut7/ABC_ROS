@@ -1,0 +1,189 @@
+Panels:
+  - Class: rviz_common/Displays
+    Help Height: 78
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /Global Options1
+        - /Status1
+        - /TF1
+        - /VINS-Fusion1
+        - /NVblox 3D Reconstruction1
+        - /Sensors & Cameras1
+      Splitter Ratio: 0.5
+    Tree Height: 800
+  - Class: rviz_common/Views
+    Name: Views
+    Splitter Ratio: 0.5
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Enabled: true
+      Name: Grid
+      Cell Size: 1
+      Color: 160; 160; 164
+      Line Style:
+        Line Width: 0.03
+        Value: Lines
+      Normal Cell Count: 0
+      Plane: XY
+      Plane Cell Count: 20
+      Reference Frame: world
+
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+      Update Interval: 0
+
+    - Class: rviz_default_plugins/RobotModel
+      Enabled: true
+      Name: RobotModel
+      Description Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /robot_description
+      Visual Enabled: true
+
+    - Class: rviz_common/Group
+      Name: VINS-Fusion
+      Displays:
+        - Class: rviz_default_plugins/Odometry
+          Enabled: true
+          Name: Odometry
+          Topic:
+            Depth: 5
+            Reliability Policy: System Default
+            Value: /odometry
+          Keep: 1
+          Shape:
+            Alpha: 1
+            Color: 0; 255; 0
+            Head Length: 0.05
+            Head Radius: 0.03
+            Shaft Length: 0.15
+            Shaft Radius: 0.02
+            Value: Arrow
+        - Class: rviz_default_plugins/Path
+          Enabled: true
+          Name: Path
+          Topic:
+            Depth: 5
+            Reliability Policy: System Default
+            Value: /path
+          Color: 0; 255; 128
+          Alpha: 1
+          Line Style: Lines
+          Line Width: 0.03
+        - Class: rviz_default_plugins/PointCloud
+          Enabled: true
+          Name: VIO PointCloud
+          Topic:
+            Depth: 5
+            Reliability Policy: System Default
+            Value: /point_cloud
+          Color: 255; 255; 0
+          Color Transformer: FlatColor
+          Size (Pixels): 3
+
+    - Class: rviz_common/Group
+      Name: NVblox 3D Reconstruction
+      Displays:
+        - Class: nvblox_rviz_plugin/NvbloxMesh
+          Enabled: true
+          Name: 3D Mesh
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /nvblox_node/mesh
+        - Class: rviz_default_plugins/Map
+          Enabled: true
+          Name: 2D Costmap (Occupancy Grid)
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /nvblox_node/static_occupancy_grid
+          Alpha: 0.7
+          Color Scheme: map
+        - Class: rviz_default_plugins/PointCloud2
+          Enabled: true
+          Name: Static ESDF PointCloud
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /nvblox_node/static_esdf_pointcloud
+          Color Transformer: AxisColor
+          Style: Points
+          Size (Pixels): 3
+
+    - Class: rviz_common/Group
+      Name: Sensors & Cameras
+      Displays:
+        - Class: rviz_default_plugins/Image
+          Enabled: true
+          Name: Feature Track
+          Topic:
+            Depth: 5
+            Reliability Policy: System Default
+            Value: /image_track
+        - Class: rviz_default_plugins/Image
+          Enabled: true
+          Name: ESS Depth
+          Topic:
+            Depth: 5
+            Reliability Policy: System Default
+            Value: /stereo/depth
+          Normalize Range: true
+          Min Value: 0.5
+          Max Value: 8.0
+        - Class: rviz_default_plugins/LaserScan
+          Enabled: true
+          Name: 2D LiDAR Scan (Red)
+          Topic:
+            Depth: 5
+            Reliability Policy: System Default
+            Value: /scan
+          Color: 255; 0; 0
+          Color Transformer: FlatColor
+          Style: Points
+          Size (Pixels): 4
+          Alpha: 1.0
+        - Class: rviz_default_plugins/PointCloud2
+          Enabled: true
+          Name: ESS 3D Visual PointCloud
+          Topic:
+            Depth: 5
+            Reliability Policy: System Default
+            Value: /stereo/points
+          Color Transformer: AxisColor
+          Style: Points
+          Size (Pixels): 2
+          Alpha: 0.85
+
+  Global Options:
+    Background Color: 30; 30; 30
+    Fixed Frame: world
+    Frame Rate: 30
+
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 6.0
+      Focal Point:
+        X: 1.0
+        Y: 0.0
+        Z: 0.5
+      Name: Current View
+      Pitch: 0.4
+      Yaw: 2.8

@@ -1,0 +1,99 @@
+/**:
+  ros__parameters:
+    # CUDA Stream 設定 (1: Blocking async stream)
+    cuda_stream_type: 1
+
+    # 體素與坐標系設定
+    voxel_size: 0.05
+    num_cameras: 1
+    use_tf_transforms: true
+    global_frame: "world"
+    pose_frame: "base_link"
+    mapping_type: "static_tsdf"
+
+    # 感測器資料流開關
+    use_depth: true
+    use_color: true
+    use_lidar: false
+    use_segmentation: false
+
+    # 處理頻率設定 (Hz)
+    tick_period_ms: 10
+    integrate_depth_rate_hz: 20.0
+    integrate_color_rate_hz: 5.0
+    integrate_lidar_rate_hz: 0.0
+    update_mesh_rate_hz: 5.0
+    update_esdf_rate_hz: 5.0
+    publish_layer_rate_hz: 5.0
+    publish_debug_vis_rate_hz: 2.0
+    decay_tsdf_rate_hz: 5.0
+    decay_dynamic_occupancy_rate_hz: 0.0
+    clear_map_outside_radius_rate_hz: 1.0
+
+    # 終端除錯訊息
+    print_rates_to_console: false
+    print_timings_to_console: false
+    print_delays_to_console: false
+    print_queue_drops_to_console: false
+    print_statistics_on_console_period_ms: 10000
+
+    # 2D ESDF 切片設定 (生成 Nav2 避障代價地圖)
+    esdf_mode: "2d"
+    publish_esdf_distance_slice: true
+
+    # 佇列與記憶體管理
+    maximum_input_queue_length: 10
+    map_clearing_radius_m: 5.0
+    map_clearing_frame_id: "base_link"
+    input_qos: "SYSTEM_DEFAULT"
+
+    # 視覺化邊界
+    esdf_slice_bounds_visualization_attachment_frame_id: "base_link"
+    esdf_slice_bounds_visualization_side_length: 10.0
+    workspace_height_bounds_visualization_attachment_frame_id: "base_link"
+    workspace_height_bounds_visualization_side_length: 10.0
+    layer_visualization_min_tsdf_weight: 0.1
+    layer_visualization_exclusion_height_m: 2.0
+    layer_visualization_exclusion_radius_m: 5.0
+    layer_visualization_undo_gamma_correction: false
+    max_back_projection_distance: 5.0
+    back_projection_subsampling: 1
+    layer_streamer_bandwidth_limit_mbps: -1.0
+
+    multi_mapper:
+      connected_mask_component_size_threshold: 2000
+      remove_small_connected_components: true
+
+    static_mapper:
+      do_depth_preprocessing: false
+      depth_preprocessing_num_dilations: 3
+      projective_integrator_max_integration_distance_m: 5.0
+      projective_integrator_truncation_distance_vox: 4.0
+      projective_integrator_weighting_mode: "inverse_square_tsdf_distance_penalty"
+      projective_integrator_max_weight: 5.0
+      projective_tsdf_integrator_invalid_depth_decay_factor: -1.0
+      free_region_occupancy_probability: 0.45
+      occupied_region_occupancy_probability: 0.55
+      unobserved_region_occupancy_probability: 0.5
+      occupied_region_half_width_m: 0.1
+      raycast_subsampling_factor: 4
+      workspace_bounds_type: "unbounded"
+      workspace_bounds_min_corner_x_m: 0.0
+      workspace_bounds_min_corner_y_m: 0.0
+      workspace_bounds_min_height_m: -0.5
+      workspace_bounds_max_corner_x_m: 0.0
+      workspace_bounds_max_corner_y_m: 0.0
+      workspace_bounds_max_height_m: 2.0
+      esdf_integrator_min_weight: 0.1
+      esdf_integrator_max_site_distance_vox: 2.0
+      esdf_integrator_max_distance_m: 2.0
+      mesh_integrator_min_weight: 0.1
+      mesh_integrator_weld_vertices: true
+      tsdf_decay_factor: 0.95
+      tsdf_decayed_weight_threshold: 0.001
+      exclude_last_view_from_decay: true
+      tsdf_set_free_distance_on_decayed: false
+      tsdf_decayed_free_distance_vox: 4.0
+      decay_integrator_deallocate_decayed_blocks: true
+      layer_streamer_exclusion_height_m: 2.0
+      layer_streamer_exclusion_radius_m: 5.0

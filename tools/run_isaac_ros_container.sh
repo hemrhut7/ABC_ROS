@@ -14,6 +14,7 @@ DOCKER_ARGS+=(--privileged)
 DOCKER_ARGS+=(--network host)
 DOCKER_ARGS+=(--ipc host)
 DOCKER_ARGS+=(-e FASTRTPS_DEFAULT_PROFILES_FILE=/usr/local/share/middleware_profiles/rtps_udp_profile.xml)
+DOCKER_ARGS+=(-e ISAAC_ROS_NVBLOX_PLUGIN_FORCE_FALLBACK_MATERIAL=1)
 
 # GUI / Display forwarding
 if [ -n "$DISPLAY" ]; then

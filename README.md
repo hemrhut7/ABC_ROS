@@ -342,7 +342,46 @@ source /workspace/install/setup.bash
 | **輸出** | `/odometry` | `nav_msgs/msg/Odometry` | VIO 即時估算之里程計位姿與速度 |
 | **輸出** | `/path` | `nav_msgs/msg/Path` | 估算之完整運動軌跡 |
 | **輸出** | `/image_track` | `sensor_msgs/msg/Image` | 帶有特徵點追蹤可視化的左右影像 |
-| **輸出** | `/point_cloud` | `sensor_msgs/msg/PointCloud` | 3D 地圖稀疏特徵點雲 |
+---
+
+## 🧊 VINS-Fusion + ESS + NVblox 整合感知與稠密建圖架構
+
+本專案將 **VINS-Fusion（雙目+IMU 視覺慣性里程計）**、**NVIDIA Isaac ROS ESS（雙目度量深度圖推論）** 與 **NVIDIA Isaac ROS NVblox（GPU 3D TSDF 重建與 2D ESDF/代價地圖生成）** 三大核心管線深度整合，實現機器人即時自主導航所需的環境感知與稠密建圖能力。
+
+### 1. 系統資料流架構
+
+* **狀態估算（VINS-Fusion）**：訂閱雙目灰階影像與 ESP32 IMU，輸出平滑高頻的 `/odometry` 與動態坐標變換 `world -> base_link`。
+* **雙目校正與深度估算（Isaac ROS ESS）**：先經由硬體加速 `RectifyNode` 消除鏡頭畸變並將極線嚴格水平對齊，再送入 TensorRT Light ESS 模型輸出公尺級度量深度圖 `/stereo/depth`。
+* **GPU 稠密建圖（Isaac ROS NVblox）**：在 GPU 內透過 TSDF 體素網格（Voxel Size: 5cm）即時融合深度圖與 VIO 位姿，輸出立體 3D 著色網格面（`/nvblox_node/mesh`）與 2D 避障代價地圖（`/nvblox_node/static_occupancy_grid`）。
+
+### 2. 一鍵啟動完整架構
+
+* **離線 Rosbag 回放驗證模式（使用模擬時間）：**
+  ```bash
+  ros2 launch my_robot_bringup vins_ess_nvblox.launch.py use_sim_time:=true
+  ```
+
+* **實體機器人即時模式：**
+  ```bash
+  ros2 launch my_robot_bringup vins_ess_nvblox.launch.py
+  ```
+
+* **同時開啟專屬 RViz2 視覺化介面（監控 3D Mesh、VIO 軌跡與 2D 代價地圖）：**
+  ```bash
+  ros2 launch my_robot_bringup vins_ess_nvblox.launch.py use_sim_time:=true rviz:=true
+  ```
+
+### 3. 關鍵主題 (Topics) 列表
+
+| 模組 | 主題名稱 | 訊息格式 | 說明 |
+| :--- | :--- | :--- | :--- |
+| **VIO** | `/odometry` | `nav_msgs/msg/Odometry` | 機器人世界坐標即時位姿與速度 |
+| **VIO** | `/path` | `nav_msgs/msg/Path` | 機器人運動軌跡 |
+| **深度感知** | `/stereo/depth` | `sensor_msgs/msg/Image` (`32FC1`) | ESS 輸出的公尺級度量深度圖 |
+| **深度感知** | `/camera/left/image_rect` | `sensor_msgs/msg/Image` | GPU 硬體校正後的左眼彩色影像 |
+| **3D 建圖** | `/nvblox_node/mesh` | `nvblox_msgs/msg/Mesh` | 即時更新的 3D 著色重建網格面 |
+| **2D 導航** | `/nvblox_node/static_occupancy_grid` | `nav_msgs/msg/OccupancyGrid` | 2D 障礙物切片（可直接供 Nav2 導航避障使用） |
+| **點雲輸出** | `/nvblox_node/static_esdf_pointcloud` | `sensor_msgs/msg/PointCloud2` | 靜態 ESDF 距離場點雲 |
 
 ---
 
@@ -526,7 +565,22 @@ ros2 launch my_robot_bringup vins_fusion.launch.py use_sim_time:=true
 rviz2 -d src/my_robot_bringup/rviz/vins_fusion.rviz
 ```
 
+#### D. VINS-Fusion + ESS + NVblox 3D 重建與 2D LiDAR 對比
+啟動完整整合節點（VINS-Fusion VIO + 雙目立體校正 + ESS 深度推論 + 3D 點雲轉換 + NVblox TSDF/Mesh/Costmap）：
+```bash
+ros2 launch my_robot_bringup vins_ess_nvblox.launch.py use_sim_time:=true
+```
+啟動整合 RViz2 視覺化介面（已配置 LiDAR 紅色雷達點、ESS 彩色 3D 點雲、NVblox 3D Mesh 與 2D 障礙物代價地圖）：
+```bash
+rviz2 -d src/my_robot_bringup/rviz/vins_ess_nvblox.rviz
+```
+重放資料集（含 LiDAR `/scan`、相機 `/camera/...` 與 IMU `/imu/...`）：
+```bash
+ros2 bag play ros2_bag/rosbag2_total_20260903_203935 --clock
+```
+
 ### 3. 一鍵自動化驗證所有管道
 ```bash
 ./tools/run_isaac_ros_container.sh "/workspaces/isaac_ros-dev/tools/test_all_pipelines.sh"
 ```
+
