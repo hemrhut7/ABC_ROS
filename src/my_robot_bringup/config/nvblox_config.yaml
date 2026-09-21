@@ -55,8 +55,8 @@
     workspace_height_bounds_visualization_attachment_frame_id: "base_link"
     workspace_height_bounds_visualization_side_length: 10.0
     layer_visualization_min_tsdf_weight: 0.1
-    layer_visualization_exclusion_height_m: 2.0
-    layer_visualization_exclusion_radius_m: 20.0
+    layer_visualization_exclusion_height_m: 20.0
+    layer_visualization_exclusion_radius_m: 50.0
     layer_visualization_undo_gamma_correction: false
     max_back_projection_distance: 5.0
     back_projection_subsampling: 1
@@ -99,5 +99,5 @@
       tsdf_set_free_distance_on_decayed: false
       tsdf_decayed_free_distance_vox: 4.0
       decay_integrator_deallocate_decayed_blocks: false
-      layer_streamer_exclusion_height_m: 2.0
-      layer_streamer_exclusion_radius_m: 20.0
+      layer_streamer_exclusion_height_m: 20.0
+      layer_streamer_exclusion_radius_m: 50.0
