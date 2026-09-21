@@ -13,7 +13,7 @@ def generate_launch_description():
     config_dir = os.path.join(pkg_share, 'config')
     urdf_file = os.path.join(config_dir, 'robot.urdf')
     vins_config = os.path.join(config_dir, 'vins_fusion_stereo_imu_config.yaml')
-    nvblox_config = os.path.join(config_dir, 'nvblox_config.yaml')
+    default_nvblox_config = os.path.join(config_dir, 'nvblox_config.yaml')
     rviz_config = os.path.join(pkg_share, 'rviz', 'vins_ess_nvblox.rviz')
 
     with open(urdf_file, 'r') as infp:
@@ -23,6 +23,7 @@ def generate_launch_description():
     engine_file_path = LaunchConfiguration('engine_file_path')
     threshold = LaunchConfiguration('threshold')
     enable_rviz = LaunchConfiguration('rviz')
+    nvblox_config = LaunchConfiguration('nvblox_config')
 
     declare_use_sim_time = DeclareLaunchArgument(
         'use_sim_time',
@@ -56,6 +57,13 @@ def generate_launch_description():
         'rviz',
         default_value='false',
         description='Launch RViz2 with integrated perception layout'
+    )
+
+    declare_nvblox_config = DeclareLaunchArgument(
+        'nvblox_config',
+        default_value=default_nvblox_config,
+        description='Path to the nvblox configuration yaml '
+                    '(use nvblox_config_edge.yaml on the edge device)'
     )
 
     # 1. Robot State Publisher for Static Robot TF Tree
@@ -236,6 +244,7 @@ def generate_launch_description():
         declare_engine_file_path,
         declare_threshold,
         declare_rviz,
+        declare_nvblox_config,
         robot_state_pub,
         vins_node,
         ess_container,
