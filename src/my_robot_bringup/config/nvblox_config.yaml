@@ -4,7 +4,7 @@
     cuda_stream_type: 1
 
     # 體素與坐標系設定
-    voxel_size: 0.05
+    voxel_size: 0.02
     num_cameras: 1
     use_tf_transforms: true
     global_frame: "world"
