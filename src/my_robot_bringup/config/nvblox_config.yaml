@@ -69,7 +69,7 @@
     static_mapper:
       do_depth_preprocessing: false
       depth_preprocessing_num_dilations: 3
-      projective_integrator_max_integration_distance_m: 5.0
+      projective_integrator_max_integration_distance_m: 3.0
       projective_integrator_truncation_distance_vox: 4.0
       projective_integrator_weighting_mode: "inverse_square_tsdf_distance_penalty"
       projective_integrator_max_weight: 5.0

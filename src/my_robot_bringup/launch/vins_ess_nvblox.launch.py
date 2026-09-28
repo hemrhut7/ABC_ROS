@@ -1,19 +1,18 @@
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import ComposableNodeContainer, Node
 from launch_ros.descriptions import ComposableNode
 
 
-def generate_launch_description():
+def launch_setup(context, *args, **kwargs):
     pkg_share = get_package_share_directory('my_robot_bringup')
     config_dir = os.path.join(pkg_share, 'config')
     urdf_file = os.path.join(config_dir, 'robot.urdf')
     vins_config = os.path.join(config_dir, 'vins_fusion_stereo_imu_config.yaml')
-    default_nvblox_config = os.path.join(config_dir, 'nvblox_config.yaml')
     rviz_config = os.path.join(pkg_share, 'rviz', 'vins_ess_nvblox.rviz')
 
     with open(urdf_file, 'r') as infp:
@@ -24,47 +23,28 @@ def generate_launch_description():
     threshold = LaunchConfiguration('threshold')
     enable_rviz = LaunchConfiguration('rviz')
     nvblox_config = LaunchConfiguration('nvblox_config')
+    override_bag_camera_info = LaunchConfiguration('override_bag_camera_info')
 
-    declare_use_sim_time = DeclareLaunchArgument(
-        'use_sim_time',
-        default_value='false',
-        description='Use simulation (bag) clock if true'
-    )
+    # Resolve input layer dimensions dynamically based on model if not overridden
+    engine_path_str = context.perform_substitution(engine_file_path)
+    width_str = context.perform_substitution(LaunchConfiguration('input_layer_width'))
+    height_str = context.perform_substitution(LaunchConfiguration('input_layer_height'))
+    override_info_str = context.perform_substitution(override_bag_camera_info).lower()
 
-    default_engine_candidates = [
-        '/workspaces/isaac_ros-dev/isaac_ros_assets/models/dnn_stereo_disparity/dnn_stereo_disparity_v4.1.0_onnx/light_ess.engine',
-        '/workspace/isaac_ros_assets/models/dnn_stereo_disparity/dnn_stereo_disparity_v4.1.0_onnx/light_ess.engine',
-    ]
-    default_engine = default_engine_candidates[0]
-    for p in default_engine_candidates:
-        if os.path.exists(p):
-            default_engine = p
-            break
+    try:
+        req_w = int(width_str)
+        req_h = int(height_str)
+    except ValueError:
+        req_w, req_h = 0, 0
 
-    declare_engine_file_path = DeclareLaunchArgument(
-        'engine_file_path',
-        default_value=default_engine,
-        description='Absolute path to ESS TensorRT engine plan'
-    )
-
-    declare_threshold = DeclareLaunchArgument(
-        'threshold',
-        default_value='0.6',
-        description='Confidence threshold for ESS disparity'
-    )
-
-    declare_rviz = DeclareLaunchArgument(
-        'rviz',
-        default_value='false',
-        description='Launch RViz2 with integrated perception layout'
-    )
-
-    declare_nvblox_config = DeclareLaunchArgument(
-        'nvblox_config',
-        default_value=default_nvblox_config,
-        description='Path to the nvblox configuration yaml '
-                    '(use nvblox_config_edge.yaml on the edge device)'
-    )
+    if req_w <= 0 or req_h <= 0:
+        if 'light_ess' in os.path.basename(engine_path_str):
+            input_w, input_h = 480, 288
+        else:
+            # Standard full ESS model uses 960x576
+            input_w, input_h = 960, 576
+    else:
+        input_w, input_h = req_w, req_h
 
     # 1. Robot State Publisher for Static Robot TF Tree
     robot_state_pub = Node(
@@ -88,6 +68,11 @@ def generate_launch_description():
         output='screen'
     )
 
+    # Determine input camera_info topics for rectification
+    # If playing older bags with unrectified CameraInfo, remap rectification to calibrated info
+    left_camera_info_topic = '/camera/left/camera_info_rectified' if override_info_str in ('true', '1') else '/camera/left/camera_info'
+    right_camera_info_topic = '/camera/right/camera_info_rectified' if override_info_str in ('true', '1') else '/camera/right/camera_info'
+
     # 3. Isaac ROS ESS Disparity & Depth Pipeline (GPU Accelerated with Rectification)
     rectify_left_node = ComposableNode(
         name='rectify_left_node',
@@ -101,7 +86,7 @@ def generate_launch_description():
         }],
         remappings=[
             ('image_raw', '/camera/left/image_raw'),
-            ('camera_info', '/camera/left/camera_info'),
+            ('camera_info', left_camera_info_topic),
             ('image_rect', '/camera/left/image_rect'),
             ('camera_info_rect', '/camera/left/camera_info_rect'),
         ]
@@ -119,7 +104,7 @@ def generate_launch_description():
         }],
         remappings=[
             ('image_raw', '/camera/right/image_raw'),
-            ('camera_info', '/camera/right/camera_info'),
+            ('camera_info', right_camera_info_topic),
             ('image_rect', '/camera/right/image_rect'),
             ('camera_info_rect', '/camera/right/camera_info_rect'),
         ]
@@ -133,8 +118,8 @@ def generate_launch_description():
             'use_sim_time': use_sim_time,
             'engine_file_path': engine_file_path,
             'threshold': threshold,
-            'input_layer_width': 480,
-            'input_layer_height': 288,
+            'input_layer_width': input_w,
+            'input_layer_height': input_h,
             'type_negotiation_duration_s': 5,
         }],
         remappings=[
@@ -239,15 +224,101 @@ def generate_launch_description():
         output='screen'
     )
 
-    return LaunchDescription([
-        declare_use_sim_time,
-        declare_engine_file_path,
-        declare_threshold,
-        declare_rviz,
-        declare_nvblox_config,
+    # 6. Optional CameraInfo Relayer (when playing older bags with unrectified CameraInfo)
+    camera_info_relay_node = Node(
+        package='my_robot_perception',
+        executable='camera_info_relay_node.py',
+        name='camera_info_relay_node',
+        parameters=[{'use_sim_time': use_sim_time}],
+        condition=IfCondition(override_bag_camera_info),
+        output='screen'
+    )
+
+    nodes = [
         robot_state_pub,
         vins_node,
         ess_container,
         nvblox_node,
         rviz_node,
+    ]
+    if override_info_str in ('true', '1'):
+        nodes.append(camera_info_relay_node)
+
+    return nodes
+
+
+def generate_launch_description():
+    pkg_share = get_package_share_directory('my_robot_bringup')
+    config_dir = os.path.join(pkg_share, 'config')
+    default_nvblox_config = os.path.join(config_dir, 'nvblox_config.yaml')
+
+    declare_use_sim_time = DeclareLaunchArgument(
+        'use_sim_time',
+        default_value='false',
+        description='Use simulation (bag) clock if true'
+    )
+
+    default_engine_candidates = [
+        '/workspaces/isaac_ros-dev/isaac_ros_assets/models/dnn_stereo_disparity/dnn_stereo_disparity_v4.1.0_onnx/light_ess.engine',
+        '/workspace/isaac_ros_assets/models/dnn_stereo_disparity/dnn_stereo_disparity_v4.1.0_onnx/light_ess.engine',
+    ]
+    default_engine = default_engine_candidates[0]
+    for p in default_engine_candidates:
+        if os.path.exists(p):
+            default_engine = p
+            break
+
+    declare_engine_file_path = DeclareLaunchArgument(
+        'engine_file_path',
+        default_value=default_engine,
+        description='Absolute path to ESS TensorRT engine plan'
+    )
+
+    declare_threshold = DeclareLaunchArgument(
+        'threshold',
+        default_value='0.6',
+        description='Confidence threshold for ESS disparity'
+    )
+
+    declare_input_layer_width = DeclareLaunchArgument(
+        'input_layer_width',
+        default_value='0',
+        description='Input layer width for ESS (0 for auto-detect based on engine name: 480 for light_ess, 960 for standard ess)'
+    )
+
+    declare_input_layer_height = DeclareLaunchArgument(
+        'input_layer_height',
+        default_value='0',
+        description='Input layer height for ESS (0 for auto-detect based on engine name: 288 for light_ess, 576 for standard ess)'
+    )
+
+    declare_override_bag_camera_info = DeclareLaunchArgument(
+        'override_bag_camera_info',
+        default_value='false',
+        description='If true, override bag CameraInfo topics with calibrated stereo rectification matrices'
+    )
+
+    declare_rviz = DeclareLaunchArgument(
+        'rviz',
+        default_value='false',
+        description='Launch RViz2 with integrated perception layout'
+    )
+
+    declare_nvblox_config = DeclareLaunchArgument(
+        'nvblox_config',
+        default_value=default_nvblox_config,
+        description='Path to the nvblox configuration yaml '
+                    '(use nvblox_config_edge.yaml on the edge device)'
+    )
+
+    return LaunchDescription([
+        declare_use_sim_time,
+        declare_engine_file_path,
+        declare_threshold,
+        declare_input_layer_width,
+        declare_input_layer_height,
+        declare_override_bag_camera_info,
+        declare_rviz,
+        declare_nvblox_config,
+        OpaqueFunction(function=launch_setup),
     ])
