@@ -13,35 +13,32 @@
 以下為專案的硬體與軟體資料流拓撲圖，展現了感測器數據上傳與控制命令下發的流程：
 
 ```mermaid
-graph TD
-    subgraph ESP32 [ESP32 微控制器端]
-        MC_IMU[IMU 數據] -->|/imu/data_raw| MC_uROS(micro-ROS Client)
-        MC_MAG[磁力計] -->|/imu/mag| MC_uROS
-        MC_BARO[氣壓計] -->|/baro/pressure| MC_uROS
-        MC_TEMP[溫度計] -->|/baro/temperature| MC_uROS
-        MC_JOINTS[輪胎編碼器] -->|/joint_states| MC_uROS
-        MC_BATT[電池電壓] -->|/battery_state| MC_uROS
-        MC_LIDAR[雷達] -->|/scan| MC_uROS
-        MC_PID[PID 目標資訊] -->|/pid_target| MC_uROS
-        MC_uROS -->|執行馬達動作| Motors[左/右馬達 PWM]
+flowchart TD
+    subgraph ESP32["ESP32 微控制器端"]
+        MC_IMU["IMU 數據"] -->|/imu/data_raw| MC_uROS["micro-ROS Client"]
+        MC_MAG["磁力計"] -->|/imu/mag| MC_uROS
+        MC_BARO["氣壓計"] -->|/baro/pressure| MC_uROS
+        MC_TEMP["溫度計"] -->|/baro/temperature| MC_uROS
+        MC_JOINTS["輪胎編碼器"] -->|/joint_states| MC_uROS
+        MC_BATT["電池電壓"] -->|/battery_state| MC_uROS
+        MC_LIDAR["雷達"] -->|/scan| MC_uROS
+        MC_PID["PID 目標資訊"] -->|/pid_target| MC_uROS
+        MC_uROS -->|執行馬達動作| Motors["左/右馬達 PWM"]
     end
 
-    subgraph Jetson [NVIDIA Jetson 主機端 (Docker Container)]
-        uROS_Agent(micro_ros_agent Node) <-->|Serial 通訊 /dev/ttyTHS1 或 /dev/ttyUSB0| MC_uROS
+    subgraph Jetson["NVIDIA Jetson 主機端 (Docker Container)"]
+        uROS_Agent["micro_ros_agent Node"] <-->|Serial 通訊| MC_uROS
         
-        %% 遙測監控節點
-        uROS_Agent -->|感測器 Topic 轉發| TelemetryNode(esp32_serial_node.py)
+        uROS_Agent -->|感測器 Topic 轉發| TelemetryNode["esp32_serial_node.py"]
         
-        %% 控制命令發送
         TelemetryNode -->|/cmd_vel & /cmd_mode| uROS_Agent
         
-        %% 雙目視覺節點
-        Cam[雙目相機 Hardware] -->|USB MJPEG 串流| SplitterNode(image_splitter_node.py)
-        SplitterNode -->|發布左右/立體影像| StereoTopics[影像主題 /camera/...]
+        Cam["雙目相機 Hardware"] -->|USB MJPEG 串流| SplitterNode["image_splitter_node.py"]
+        SplitterNode -->|發布左右立體影像| StereoTopics["影像主題 /camera/..."]
     end
 
-    subgraph PC [Windows PC 監控端]
-        FoxgloveBridge(foxglove_bridge Node) <-->|WebSocket 連線 ws://Jetson_IP:8765| FoxgloveStudio[Foxglove Studio 視覺化軟體]
+    subgraph PC["Windows PC 監控端"]
+        FoxgloveBridge["foxglove_bridge Node"] <-->|WebSocket 連線| FoxgloveStudio["Foxglove Studio 視覺化軟體"]
         StereoTopics --> FoxgloveBridge
         TelemetryNode --> FoxgloveBridge
     end
@@ -109,13 +106,32 @@ vcs status
 ### 1. 雙目極線校正與 ESS 深度推論管線
 ```mermaid
 flowchart LR
-    A["/camera/left/image_raw<br>/camera/right/image_raw"] --> B["isaac_ros_image_proc<br>RectifyNode (GPU)"]
-    C["CameraInfo (R0, R1, P0, P1)<br>立體共面平行對齊"] --> B
-    B --> D["Rectified Stereo Pairs<br>極線嚴格水平共面"]
-    D --> E["isaac_ros_ess<br>ESSDisparityNode (TensorRT)"]
-    E --> F["/stereo/disparity<br>GPU 視差圖"]
-    F --> G["DisparityToDepthNode"]
-    G --> H["/stereo/depth<br>度量深度圖 (32FC1)"]
+    subgraph Inputs["雙目原始輸入"]
+        L_Raw["/camera/left/image_raw"]
+        R_Raw["/camera/right/image_raw"]
+        Calib["CameraInfo (R0, R1, P0, P1)"]
+    end
+
+    subgraph Rect["硬體加速極線校正"]
+        RectNode["isaac_ros_image_proc (RectifyNode)"]
+        RectPairs["立體共面平行對齊影像對"]
+    end
+
+    subgraph ESS["TensorRT 深度推論"]
+        ESSNode["isaac_ros_ess (ESSDisparityNode)"]
+        Disp["/stereo/disparity (視差圖)"]
+        D2D["DisparityToDepthNode"]
+        Depth["/stereo/depth (公尺深度圖)"]
+    end
+
+    L_Raw --> RectNode
+    R_Raw --> RectNode
+    Calib --> RectNode
+    RectNode --> RectPairs
+    RectPairs --> ESSNode
+    ESSNode --> Disp
+    Disp --> D2D
+    D2D --> Depth
 ```
 
 - **立體校正機制**：驅動發布經 OpenCV `cv::stereoRectify()` 計算的旋轉與投影矩陣，消除了兩鏡頭間 13px 的垂直偏差，使 ESS 1D 水平代價體積匹配成功率提升至 99% 以上。
@@ -127,30 +143,30 @@ flowchart LR
 
 ### 2. VINS-Fusion + ESS + NVblox 整合感知與稠密建圖
 ```mermaid
-graph TD
-    subgraph Sensors [感測器輸入]
+flowchart TD
+    subgraph Sensors["感測器輸入"]
         LeftImg["左鏡頭影像 (/camera/left/image_raw)"]
         RightImg["右鏡頭影像 (/camera/right/image_raw)"]
         IMU["ESP32 IMU (/imu/data_raw)"]
     end
 
-    subgraph VIO [VINS-Fusion]
-        LeftImg --> VINS[VINS Estimator]
+    subgraph VIO["VINS-Fusion"]
+        LeftImg --> VINS["VINS Estimator"]
         RightImg --> VINS
         IMU --> VINS
         VINS -->|發布 TF: world -> base_link| TF["/tf"]
         VINS -->|位姿與速度| Odom["/odometry"]
     end
 
-    subgraph Perception [Isaac ROS ESS]
-        LeftImg --> ESS[ESS 深度推論管線]
+    subgraph Perception["Isaac ROS ESS"]
+        LeftImg --> ESS["ESS 深度推論管線"]
         RightImg --> ESS
         ESS --> Depth["/stereo/depth"]
         ESS --> Points["/stereo/points (3D 點雲)"]
     end
 
-    subgraph Mapping [Isaac ROS NVblox]
-        Depth --> NVblox[NVblox GPU TSDF Integrator]
+    subgraph Mapping["Isaac ROS NVblox"]
+        Depth --> NVblox["NVblox GPU TSDF Integrator"]
         TF --> NVblox
         LeftImg -->|色彩投影| NVblox
         NVblox --> Mesh["/nvblox_node/mesh (3D 網格地圖)"]
