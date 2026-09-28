@@ -621,7 +621,7 @@ void ImageSplitterNode::init_camera_info()
   int half_w = width_ / 2;
   int h = height_;
 
-  // Left Camera (cam0) calibration
+  // Left Camera (cam0) calibration with stereo rectification
   left_info_msg_.header.frame_id = left_frame_id_;
   left_info_msg_.width = half_w;
   left_info_msg_.height = h;
@@ -632,18 +632,20 @@ void ImageSplitterNode::init_camera_info()
     0.0, 639.1076963871467, 232.5087613689875,
     0.0, 0.0, 1.0
   };
+  // Stereo rectification rotation matrix R0 from cv::stereoRectify
   left_info_msg_.r = {
-    1.0, 0.0, 0.0,
-    0.0, 1.0, 0.0,
-    0.0, 0.0, 1.0
+     0.99998325,  0.00354823,  0.00457229,
+    -0.00353017,  0.99998595, -0.00395345,
+    -0.00458626,  0.00393725,  0.99998173
   };
+  // Rectified projection matrix P0 (fx=fy=693.2152, cx=314.9104, cy=239.1414, Tx=0)
   left_info_msg_.p = {
-    642.3066735043554, 0.0, 307.39468172973955, 0.0,
-    0.0, 639.1076963871467, 232.5087613689875, 0.0,
-    0.0, 0.0, 1.0, 0.0
+    693.21520523,   0.0,         314.91036224, 0.0,
+      0.0,         693.21520523, 239.14138603, 0.0,
+      0.0,           0.0,           1.0,        0.0
   };
 
-  // Right Camera (cam1) calibration (Baseline from Kalibr: 51.912mm = 0.05191207112027276m)
+  // Right Camera (cam1) calibration (Baseline: 51.912mm, Tx = -fx' * Baseline = -35.99214)
   right_info_msg_.header.frame_id = right_frame_id_;
   right_info_msg_.width = half_w;
   right_info_msg_.height = h;
@@ -654,15 +656,17 @@ void ImageSplitterNode::init_camera_info()
     0.0, 640.7801151585047, 245.5372357813793,
     0.0, 0.0, 1.0
   };
+  // Stereo rectification rotation matrix R1 from cv::stereoRectify
   right_info_msg_.r = {
-    1.0, 0.0, 0.0,
-    0.0, 1.0, 0.0,
-    0.0, 0.0, 1.0
+     0.99983589,  0.00322815,  0.01782635,
+    -0.00329846,  0.99998689,  0.00391613,
+    -0.01781348, -0.00397428,  0.99983343
   };
+  // Rectified projection matrix P1 (Tx = -fx' * Baseline = -35.99214383)
   right_info_msg_.p = {
-    644.2906010514704, 0.0, 340.17904501005484, -644.2906010514704 * 0.05191207112027276,
-    0.0, 640.7801151585047, 245.5372357813793, 0.0,
-    0.0, 0.0, 1.0, 0.0
+    693.21520523,   0.0,         314.91036224, -35.99214383,
+      0.0,         693.21520523, 239.14138603,   0.0,
+      0.0,           0.0,           1.0,          0.0
   };
 }
 
